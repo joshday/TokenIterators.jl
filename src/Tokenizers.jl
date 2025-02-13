@@ -59,12 +59,13 @@ Base.eltype(::Type{T}) where {T <: Token} = T
 tokens(x::AbstractString, t) = Token(t, codeunits(x), init(t), 0, 0)
 tokens(x::AbstractVector{UInt8}, t) = Token(t, x, init(t), 0, 0)
 
+file_tokens(x, t) = tokens(read(x), t)
 file_tokens(x) = tokens(read(x), get(TOKENIZERS, splitext(x)[2], CharTokens()))
 
 function Base.show(io::IO, t::Token{T, K, D}) where {T, K, D}
     (; i, j, kind, data) = t
     print(io, "Token", styled" {bright_black:$(T.name.name)::$K}", styled" {bright_cyan:$i - $j}", styled" {bright_green:$(repr(kind))}")
-    print(io, styled" {bright_yellow:$(String(t, 50))}")
+    print(io, styled" {bright_yellow:$(repr(String(t, 50)))}")
 end
 function Base.String(t::Token, n = length(t.data))
     (;data, i, j) = t
@@ -78,9 +79,29 @@ function Base.iterate(t::Token, state=t)
 end
 
 #-----------------------------------------------------------------------------# CharTokens
+# Fallback, doesn't really do anything other than force every UInt8 to be a Char
 struct CharTokens end
 init(::CharTokens) = Char(0)
-next(::CharTokens, data, i, prevkind) = @inbounds Char(data[i]), i, j
+function next(t::Token{CharTokens})
+    i = t.i + 1
+    i > length(t.data) && return nothing
+    t(Char(t.data[i]), i, i)
+end
+
+struct StringTokens end
+init(::StringTokens) = :init
+function next(t::Token{StringTokens})
+    i = t.j + 1
+    i > length(t.data) && return nothing
+    j = findnext_unescaped('"', t.data, i + 1)
+    if Char(t.data[i]) == '"'
+        isnothing(j) && return t(:OTHER, i, length(t.data))
+        return t(:STRING, i, j)
+    else
+        j = isnothing(j) ? length(t.data) : j - 1
+        return t(:OTHER, i, j)
+    end
+end
 
 #-----------------------------------------------------------------------------# HTMLTokens
 # kinds: :tag_open, :tag_close, :comment, :doctype, :text, :unk
