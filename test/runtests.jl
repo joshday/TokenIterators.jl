@@ -1,6 +1,6 @@
-using StreamParse
+using Tokenizers
 using Test
 
-@testset "StreamParse.jl" begin
+@testset "Tokenizers.jl" begin
     # Write your tests here.
 end
