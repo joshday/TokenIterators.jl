@@ -48,13 +48,16 @@ function Base.show(io::IO, t::Token)
 end
 
 #-----------------------------------------------------------------------------# Next
-struct Next{V, SV, K}
+struct Next{D, V, SV, K}
+    data::D
     view::V
     sview::SV
     i::Int
     prev::K
 end
-Next(t::Token) = @inbounds Next(@view(t.data[t.j+1:end]), StringView(@view(t.data[t.j+1:end])), t.j + 1, t.kind)
+function Next(t::Token)
+    Next(t.data, @view(t.data[t.j+1:end]), StringView(@view(t.data[t.j+1:end])), t.j + 1, t.kind)
+end
 Base.String(s::Next) = String(s.view)
 function Base.show(io::IO, t::Next)
     k = styled"{bright_red:Next} {bright_yellow:$(format(t.i))} {bright_cyan:prev=$(repr(t.prev))} "
@@ -69,12 +72,11 @@ Base.first(n::Next, x::Integer) = first(n.view, x)
 Base.IteratorSize(::Type{T}) where {T <: Token} = Base.SizeUnknown()
 Base.eltype(::Type{T}) where {T <: Token} = T
 
-Base.isdone(t::Token, state::Next) = state.i > length(t.data)
+Base.isdone(t::Token, n::Next) = n.i > length(t.data)
+
 function Base.iterate(t::Token, n=Next(t))
     Base.isdone(t, n) && return nothing
-    kind, j = next(t.domain, n)
-    j += n.view.indices[1][1] - 1
-    t2 = Token(t.domain, t.data, kind, n.i, j)
+    t2 = next(t.domain, n)
     return t2, Next(t2)
 end
 
@@ -131,15 +133,18 @@ show_as(f::Function) = "Function($f)"
 isfirst(cf::CharFun, n::Next) = cf.f(first(n.sview))
 findfirst(cf::CharFun, n::Next) = findfirst(cf.f, n.sview)
 
-# Unescaped
-struct Unescaped{c} end
-Base.show(io::IO, o::Unescaped{c}) where {c} = print(io, "Unescaped('$c')")
-function findfirst(o::Unescaped{c}, (; view)::Next) where {c}
+struct Unescaped
+    char::Char
+    escape::Char
+    Unescaped(x::Char, esc::Char='\\') = new(x, esc)
+end
+function findfirst(o::Unescaped, s::Next)
+    (; view) = s
     skip = false
     for j in 2:length(view)
-        char = @inbounds Char(view[j])
-        char == c && !skip && return j
-        skip = char == '\\'
+        x = view[j]
+        x == UInt8(o.char) && !skip && return j
+        skip = x == UInt8(o.escape)
     end
 end
 # function findnext_unescaped(char::Char, data, i)
@@ -164,7 +169,7 @@ Base.show(io::IO, b::Before) = print(io, "Before($(show_as(b.x)))")
 findfirst(b::Before, n::Next) = (j = findfirst(b.x, n); isnothing(j) ? length(n.view) : j - 1)
 
 
-STRING_RULE = Rule('"', Unescaped{'"'}())
+STRING_RULE = Rule('"', Unescaped('"'))
 
 macro trytok(n::Next, r::Rule, kind)
     esc(quote
@@ -180,8 +185,8 @@ end
 Base.show(io::IO, b::BSplit{R}) where {R} = print(io, "BSplit: $(b.rule)")
 init(o::BSplit) = false
 function next(o::BSplit, n::Next)
-    isfirst(o.rule, n) && return true => findfirst(o.rule.idx, n)
-    return false => findfirst(Before(o.rule.id), n)
+    isfirst(o.rule, n) && return Token(o, n.data, true, n.i, findfirst(o.rule.idx, n) + n.i - 1)
+    return Token(o, n.data, false, n.i, findfirst(Before(o.rule.id), n) + n.i - 1)
 end
 
 #-----------------------------------------------------------------------------# Partition
