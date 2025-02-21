@@ -80,6 +80,11 @@ function Base.iterate(t::Token, n=Next(t))
     return t2, Next(t2)
 end
 
+@noinline function next(o::TokenDomain, n::Next)
+    kind, j = _next(o, n)
+    Token(o, n.data, kind, n.i, n.i + j - 1)
+end
+
 #-----------------------------------------------------------------------------# Rule
 # A rule is 1) How to Identify if the data is a given token, and 2) How to find the last index
 struct Rule{T, S}
@@ -147,14 +152,6 @@ function findfirst(o::Unescaped, s::Next)
         skip = x == UInt8(o.escape)
     end
 end
-# function findnext_unescaped(char::Char, data, i)
-#     skip_next = false
-#     for j in i:length(data)
-#         c = Char(data[j])
-#         c == char && !skip_next && return j
-#         skip_next = c == '\\'
-#     end
-# end
 
 struct First{T} x::T end
 Base.show(io::IO, f::First) = print(io, "First($(show_as(f.x)))")
@@ -184,9 +181,8 @@ struct BSplit{R <: Rule} <: TokenDomain
 end
 Base.show(io::IO, b::BSplit{R}) where {R} = print(io, "BSplit: $(b.rule)")
 init(o::BSplit) = false
-function next(o::BSplit, n::Next)
-    isfirst(o.rule, n) && return Token(o, n.data, true, n.i, findfirst(o.rule.idx, n) + n.i - 1)
-    return Token(o, n.data, false, n.i, findfirst(Before(o.rule.id), n) + n.i - 1)
+function _next(o::BSplit, n::Next)
+    isfirst(o.rule, n) ? true => findfirst(o.rule.idx, n) : false => findfirst(Before(o.rule.id), n)
 end
 
 #-----------------------------------------------------------------------------# Partition
