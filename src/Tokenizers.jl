@@ -116,8 +116,9 @@ end
 abstract type Tokenizer{T <: Token} end
 Base.IteratorSize(::Type{T}) where {T <: Tokenizer} = Base.SizeUnknown()
 Base.eltype(::Type{Tok}) where {T,Tok <: Tokenizer{T}} = T
+init_state(o::Tokenizer) = o.token
 
-function Base.iterate(o::Tokenizer, state=o.token)
+function Base.iterate(o::Tokenizer, state=init_state(o))
     state.j == length(state.data) && return nothing
     next(o, next(state))
 end
@@ -128,9 +129,8 @@ struct JSONTokens{T} <: Tokenizer{T}
     JSONTokens(t::T) where {T <: Token} = new{T}(t)
 end
 JSONTokens(data::Data) = JSONTokens(Token(data, :init))
-
 function next(o::JSONTokens, n::Token)
-    out = isspace ⊚ n ? n ∘ :ws ⊚ Until(!isspace) :
+    n = isspace ⊚ n ? n ∘ :ws ⊚ Until(!isspace) :
         '{' ∘ n ? n ⋆ :bracket_open :
         '}' ∘ n ? n ⋆ :bracket_close  :
         '[' ∘ n ? n ⋆ :square_open :
@@ -143,7 +143,7 @@ function next(o::JSONTokens, n::Token)
         '"' ∘ n ? n ∘ :string ∘ Unescaped(UInt8('"')) :
         Set(b"-0123456789") ∘ n ? n ∘ :number ∘ Set(b"-+eE.0123456789") :
         n ⋆ :unknown
-    return out, out
+    return n, n
 end
 
 
