@@ -4,8 +4,7 @@ using StyledStrings, StringViews, Parsers
 
 import Base: startswith, findfirst, findnext, !, /, //
 
-export Token, Next, JSONTokens, HTMLTokens, XMLTokens, debug, next, Rule, DataRule, SDataRule, BSplit, Until, Unescaped,
-    ≻, ⪼, ≺, ⪻
+export Token, Next, JSONTokens, HTMLTokens, XMLTokens, debug, next, Rule, DataRule, SDataRule, BSplit, Until, Unescaped, ..
 
 #-----------------------------------------------------------------------------# utils
 const Data = AbstractVector{UInt8}
@@ -25,19 +24,20 @@ end
 
 
 #-----------------------------------------------------------------------------# Token
-struct Token{T <: Data, K, S} <: Data
+struct Token{T <: Data, K} <: Data
     data::T
     kind::K
     i::Int
     j::Int
-    state::S
 end
+Token(data, kind) = Token(data, kind, 1, 0)
 
 # Get Token for remainder of data
-next(t::Token{T,K,S}) where {T,K,S} = Token(t.data, t.kind, t.j + 1, length(t.data), t.state)
+next(t::Token{T,K}) where {T,K} = Token(t.data, t.kind, t.j + 1, length(t.data))
 
 # Replace (kind, j, state)
-# (t::Token{T,K,S})(k::K, j::Int = 1, s::S=t.state) where {T,K,S} = Token(t.data, k, t.i, t.i + j - 1, s)
+(t::Token{T,K})(k::K) where {T,K} = Token(t.data, k, t.i, t.i)
+(t::Token{T,K})(k::K, j::Int) where {T,K} = Token(t.data, k, t.i, t.i + j - 1)
 
 # AbstractArray interface
 Base.length(t::Token) = t.j - t.i + 1
@@ -61,10 +61,7 @@ Base.show(io::IO, t::Token) = show(io, MIME("text/plain"), t)
 
 # Token mini-DSL
 initkind(::Type{Symbol}) = :init
-initstate(::Type{Symbol}) = :init
 initkind(::Type{Bool}) = false
-initstate(::Type{Bool}) = false
-initstate(::Type{Nothing}) = nothing
 
 
 isfirst(x::UInt8, data::Data) = data[1] == x
@@ -77,8 +74,6 @@ isfirst(x::Char, data::SData) = data[1] == x
 isfirst(x::Union{Regex, SData}, data::SData) = startswith(x, data)
 isfirst(f::Function, data::SData) = f(data[1])
 
-≺(x, t::Token) = isfirst(x, t)
-⪻(x, t::Token) = isfirst(x, StringView(t))
 
 findj(x::UInt8, data::Data, i) = findnext(==(x), data, i)
 findj(x::Data, data::Data, i) = last(findnext(x, data, i))
@@ -108,241 +103,85 @@ function findj(u::Unescaped{T}, data, i) where {T}
     error("No unescaped character $(repr(u.x)) found in data")
 end
 
+#-----------------------------------------------------------------------------# Token mini-DSL
+∘(x, t::Token) = isfirst(x, t)
+⊚(x, t::Token) = isfirst(x, StringView(t))
 
-/(t::Token{T,K,S}, kind::K) where {T,K,S} = Token(t.data, kind, t.i, t.j, t.state)
-/(t::Token{T,K,S}, x::Int) where {T,K,S} = Token(t.data, t.kind, t.i, t.i + x - 1, t.state)
-/(t::Token{T,K,S}, x) where {T,K,S} = Token(t.data, t.kind, t.i, t.i + findj(x, t, 2) - 1, t.state)
-//(t::Token, x) = Token(t.data, t.kind, t.i, t.i + findj(x, StringView(t), 2) - 1, t.state)
-
-# /(t::Token, x::Int) = t(t.kind, x, t.state)
-# /(t::Token, x) = t(t.kind, findj(x, t, 2), t.state)
-# //(t::Token, x) = t(t.kind, findj(x, StringView(t), 2), t.state)
-
-
-# ≻(t::Token, x::Tuple) = t(x[1], findj(get(x, 2, 1), t, 2), get(x, 3, t.state))
-# ⪼(t::Token, x::Tuple) = t(x[1], findj(get(x, 2, 1), StringView(t), 2), get(x, 3, t.state))
-
-# ⪼(t::Token, x::Tuple) = t(x[1], findnext(x[2], t, 2))
-
-# ≻(t::Token{T,K,S}, kind::K) where {T, K, S} = t(kind)
-# ≻(t::Token{T, K, S}, x::Pair{K, Int}) where {T, K, S} = t(x.first, x.second)
-# ≻(t::Token{T,K,S}, x::Pair{K, <:Function}) where {T, K, S} = t(x.first, findnext(x.second, t, t.i + 1))
-
-# ⪼(t::Token{T,K,S}, x::Pair{K, <:Function}) where {T,K,S} = t(x.first, findnext(x.second, StringView(t), t.i + 1))
+∘(t::Token{T,K}, k::K) where {T,K} = Token(t.data, k, t.i, t.j)
+∘(t::Token{T,K}, x) where {T,K} = Token(t.data, t.kind, t.i, t.i + findj(x, t, 2) - 1)
+⊚(t::Token{T,K}, x) where {T,K} = Token(t.data, t.kind, t.i, t.i + findj(x, StringView(t), 2) - 1)
+⋆(t::Token{T,K}, k::K) where {T,K} = Token(t.data, k, t.i, t.i)
 
 #-----------------------------------------------------------------------------# Tokenizer
-abstract type Tokenizer{T <: Data, K, S} end
+abstract type Tokenizer{T <: Token} end
 Base.IteratorSize(::Type{T}) where {T <: Tokenizer} = Base.SizeUnknown()
-Base.eltype(::Type{Tok}) where {T, K, S, Tok <: Tokenizer{T, K, S}} = Token{T, K, S}
-init(t::Tokenizer{T, K, S}) where {T, K, S} = Token(t.data, initkind(K), 1, 0, initstate(S))
+Base.eltype(::Type{Tok}) where {T,Tok <: Tokenizer{T}} = T
 
-
-function Base.iterate(o::Tokenizer, t = init(o))
-    t.j == length(t.data) && return nothing
-    n = next(o, next(t))
-    return n, n
+function Base.iterate(o::Tokenizer, state=o.token)
+    state.j == length(state.data) && return nothing
+    next(o, next(state))
 end
-
-
-# #-----------------------------------------------------------------------------# Rule
-# struct Rule{A_OP <: Union{typeof(≺), typeof(⪻)}, A, B_OP <: Union{typeof(≻), typeof(⪼)}, B}
-#     a::Base.Fix1{A_OP, A}
-#     b::Base.Fix2{B_OP, B}
-# end
-# function Base.show(io::IO, r::Rule{A_OP, A, B_OP, B}) where {A_OP, A, B_OP, B}
-#     print(io, styled"Rule: {bright_green:$(r.a.x) $(r.a.f) n && return n $(r.b.f) $(r.b.x))}")
-# end
-
-# ≺(x) = Base.Fix1(≺, x)
-# ⪻(x) = Base.Fix1(⪻, x)
-# ≻(x) = Base.Fix2(≻, x)
-# ⪼(x) = Base.Fix2(⪼, x)
-
-# #-----------------------------------------------------------------------------# BSplit
-# struct BSplit{T, R} <: Tokenizer{T, Bool, Nothing}
-#     data::T
-#     rule::R
-# end
-# function next((; rule)::BSplit, n::Token)
-#     if rule.a(n)
-#         rule.b.op(n, (true, findj))
-#     else
-#     end
-# end
-
-# struct Split{T, A, B} <: Tokenizer{T, Bool, Nothing}
-#     data::T
-#     a::A
-#     b::B
-# end
-# function next(o::Split, n::Token)
-#     o.a(n) && return o.b(n)
-# end
 
 #-----------------------------------------------------------------------------# JSONTokens
-struct JSONTokens{T} <: Tokenizer{T, Symbol, Symbol}
-    data::T
+struct JSONTokens{T} <: Tokenizer{T}
+    token::T
+    JSONTokens(t::T) where {T <: Token} = new{T}(t)
 end
+JSONTokens(data::Data) = JSONTokens(Token(data, :init))
+
 function next(o::JSONTokens, n::Token)
-    isspace ⪻ n && return n // Until(!isspace) / :ws
-    '{' ≺ n && return n / :bracket_open / 1
-    '}' ≺ n && return n / :bracket_close / 1
-    '[' ≺ n && return n / :square_open / 1
-    ']' ≺ n && return n / :square_close / 1
-    ',' ≺ n && return n / :comma / 1
-    ':' ≺ n && return n / :colon / 1
-    't' ≺ n && return n / :var"true" / 4
-    'f' ≺ n && return n / :var"false" / 5
-    'n' ≺ n && return n / :null / 4
-    '"' ≺ n && return n / :string / Unescaped(UInt8('"'))
-    # Set(b"-0123456789") ≺ n && return n / :number / Set(b"-+eE.0123456789")
-    n / :unknown / 1
+    out = isspace ⊚ n ? n ∘ :ws ⊚ Until(!isspace) :
+        '{' ∘ n ? n ⋆ :bracket_open :
+        '}' ∘ n ? n ⋆ :bracket_close  :
+        '[' ∘ n ? n ⋆ :square_open :
+        ']' ∘ n ? n ⋆ :square_close :
+        ',' ∘ n ? n ⋆ :comma :
+        ':' ∘ n ? n ⋆ :colon :
+        't' ∘ n ? n ∘ :var"true" ∘ 4 :
+        'f' ∘ n ? n ∘ :var"false" ∘ 5 :
+        'n' ∘ n ? n ∘ :null ∘ 4 :
+        '"' ∘ n ? n ∘ :string ∘ Unescaped(UInt8('"')) :
+        Set(b"-0123456789") ∘ n ? n ∘ :number ∘ Set(b"-+eE.0123456789") :
+        n ⋆ :unknown
+    return out, out
 end
 
 
-
-
-# StringViews.StringView(t::Token) = StringView(view(t))
-# Base.getindex(t::Token, i::Int) = view(t)[i]
-# Base.getindex(t::Token, x) = @view view(t)[x]
-# Base.iterate(t::Token, state...) = iterate(view(t), state...)
-# Base.length(t::Token) = length(view(t))
-# Base.eltype(::Type{<:Token}) = UInt8
-# Base.IteratorSize(::Type{<:Token}) = Base.HasLength()
-# Base.keys(t::Token) = keys(view(t))
-# Base.nextind(t::Token, i) = i + 1
-
-
-# startswith(r::Rule, t::Token) = startswith(r.token_start, t)
-# startswith(x::UInt8, t::Token) = x == t[1]
-# startswith(x::AbstractVector{UInt8}, t::Token) = x == t[1:length(x)]
-
-# findnext(r::Rule, t::Token, i) = findnext(r.token_end, t, i)
-# findnext(x::UInt8, t::Token, i) = findnext(==(x), t, i)
-
-# struct Last{T} x::T end; findnext(x::Last, t::Token, i) = last(findnext(x.x, t, i))
-
-# startswith(x::UInt8, t::Token) = x == t[1]
-
-# isnext(r::Rule, t::Token) = isnext(r.token_start, t)
-
-
-# next(t::Token, ::Type{UInt8}, i::Int=1) = t.data[t.j + i]
-# next(t::Token, ::Type{Char}, i::Int=1) = StringView(viewnext(t))
-
-# ≺(t::Token, r::Rule) = ≺(t, r.token_start)
-# ≺(t, x::UInt8) = next(t, UInt8) == x
-# ≺(t, x::AbstractVector{UInt8}) = all(x -> x[1] == x[2], zip(viewnext(t), x))
-
-
-# next(t::Token, r::Rule) = Token(t.data, r.kind, t.j + 1, findnext(r.token_end, t, t.j + 1 + nbytes(r.token_start)))
-
-# next(t::Token{T, K, S}, kind::K, j::Integer, state::S=t.state) = Token(t.data, kind, t.j + 1, j, state)
-
-
-
-
-# #-----------------------------------------------------------------------------# Next
-# struct Next{T} <: TokenLike
-#     token::T
-# end
-# Base.view(n::Next) = @view(n.token.data[n.token.j+1:end])
-# (n::Next)(kind) = n.token(kind)
-# (n::Next)(kind, x) = n.token(kind, n.token.j + findnext(x, n, 2))
-# (n::Next)(kind, w::Integer, x) = n.token(kind, n.token.j + findnext(x, n, w + 1))
-
-# # `a ≺ b` means "a begins with b"
-# ≺(x::UInt8, n::Next) = view(n)[1] == x
-# ≺(x::Data, n::Next) = all(x -> x[1] == x[2], zip(view(n), x))
-# ≺(x::Char, n::Next) = ≺(UInt8(x), n::Next)
-# ≺(f::Function, n::Next) = f(first(view(n)))
-# ≺(x::Set{UInt8}, n::Next) = view(n)[1] in x
-# for f in (:isspace, :isdigit, :islowercase, :isuppercase)
-#     @eval ≺(::typeof($f), n::Next) = $f(first(StringView(n)))
-#     @eval findnext(::typeof($f), n::Next, i) = findnext($f, StringView(n), i)
-#     @eval findnext(::typeof(!$f), n::Next, i) = findnext(!$f, StringView(n), i)
-# end
-
-# struct First{T} x::T end
-# struct Last{T} x::T end
-# struct Before{T} x::T end
-# struct After{T} x::T end
-
-# # Returns index in terms of view(::Next).  `i` input will always be > 1
-# findnext(x::UInt8, n::Next, i) = findnext(==(x), view(n), i)
-# findnext(x::Int, n::Next, i) = x
-# findnext(x::Char, n::Next, i) = findnext(UInt8(x), n, i)
-# findnext(x::First{<:Data}, n::Next, i) = first(findnext(x.x, view(n), i))
-# findnext(x::Last{<:Data}, n::Next, i) = last(findnext(x.x, view(n), i))
-# findnext(x::Last{Regex}, n::Next, i) = last(findnext(x.x, StringView(n), i))
-# findnext(x::Last{Set{UInt8}}, n::Next, i) = last(findnext(b -> b in x.x, view(n), i))
-# findnext(x::Before{UInt8}, n::Next, i) = (j = findnext(==(x.x), x, i); isnothing(j) ? length(n) : j - 1)
-# findnext(x::Before{<:Data}, n::Next, i) = (j = findnext(x.x, view(n), i); isnothing(j) ? length(n) : first(j) - 1)
-# findnext(x::Before{<:Function}, n::Next, i) = (j = findnext(x.x, n, i); isnothing(j) ? length(n) : j - 1)
-# findnext(x::Regex, n::Next, i) = only(findnext(x, StringView(n), i))
-# findnext(f::Function, n::Next, i) = findnext(f, view(n), i)
-# findnext(s::Set{UInt8}, n::Next, i) = (j = findnext(x -> x ∉ s, view(n), i); isnothing(j) ? length(n) : j - 1)
-# findnext(x::After, n::Next, i) = findnext(x.x, n, i) + 1
-
-
-
-
-# #-----------------------------------------------------------------------------# Tokenizer
-# abstract type Tokenizer{D <: AbstractVector{UInt8}, K} end
-# init(::Type{Symbol}) = :init
-# init(::Type{T}) where {T} = typemin(T)
-
-# Base.IteratorSize(::Type{T}) where {T <: Tokenizer} = Base.SizeUnknown()
-# Base.eltype(::Type{T}) where {D, K, T <: Tokenizer{D, K}} = Token{D, K}
-
-# function Base.iterate(o::T, t::Token = Token(o.data, init(K), 1, 0)) where {D, K, T <: Tokenizer{D, K}}
-#     t.j == length(t.data) && return nothing
-#     n = next(o, Next(t))
-#     return n, n
-# end
-
-# function Base.show(io::IO, o::T) where {T <: Tokenizer}
-#     print(io, T.name.name, ':')
-#     n = min(displaysize(io)[1] - 5, 10)
-#     toks = first(o, n)
-#     print(io, map(x -> styled"\n  $x", toks)...)
-#     toks[end].j == length(toks[end].data) || print(io, styled"\n   {bright_green:⋮}")
-# end
-
-# #-----------------------------------------------------------------------------# JSONTokens
 # struct JSONTokens{T} <: Tokenizer{T, Symbol}
 #     data::T
 # end
-# function next(::JSONTokens, n::Next)
-#     isspace ≺ n && return n(:ws, Before(!isspace))
-#     '{' ≺ n && return n(:bracket_open)
-#     '}' ≺ n && return n(:bracket_close)
-#     '[' ≺ n && return n(:square_open)
-#     ']' ≺ n && return n(:square_close)
-#     ',' ≺ n && return n(:comma)
-#     ':' ≺ n && return n(:colon)
-#     't' ≺ n && return n(:var"true", 4)
-#     'f' ≺ n && return n(:var"false", 5)
-#     'n' ≺ n && return n(:null, 4)
-#     '"' ≺ n && return n(:string, Unescaped('"'))
-#     Set(b"-0123456789") ≺ n && return n(:number, Set(b"-+eE.0123456789"))
-#     n(:unknown)
+# function next(o::JSONTokens, n::Token)
+#     out = isspace ⊚ n ? n ∘ :ws ⊚ Until(!isspace) :
+#         '{' ∘ n ? n ⋆ :bracket_open :
+#         '}' ∘ n ? n ⋆ :bracket_close  :
+#         '[' ∘ n ? n ⋆ :square_open :
+#         ']' ∘ n ? n ⋆ :square_close :
+#         ',' ∘ n ? n ⋆ :comma :
+#         ':' ∘ n ? n ⋆ :colon :
+#         't' ∘ n ? n ∘ :var"true" ∘ 4 :
+#         'f' ∘ n ? n ∘ :var"false" ∘ 5 :
+#         'n' ∘ n ? n ∘ :null ∘ 4 :
+#         '"' ∘ n ? n ∘ :string ∘ Unescaped(UInt8('"')) :
+#         Set(b"-0123456789") ∘ n ? n ∘ :number ∘ Set(b"-+eE.0123456789") :
+#         n ⋆ :unknown
+#     return out
 # end
 
-# #-----------------------------------------------------------------------------# HTMLTokens
-# struct HTMLTokens{T} <: Tokenizer{T, Symbol}
+
+#-----------------------------------------------------------------------------# HTMLTokens
+# struct HTMLTokens{T} <: Tokenizer{T, Symbol, Symbol}
 #     data::T
 # end
-# function next(::HTMLTokens, n::Next)
-#     b"<!-" ≺ n && return n(:comment, Last(b"-->"))
-#     b"<!" ≺ n && return n(:doctype, '>')
-#     b"</" ≺ n && return n(:tagclose, '>')
-#     b"<script" ≺ n && return n(:scriptopen, '>')
-#     b"<" ≺ n && return n(:tagopen, '>')
-#     n.token.kind == :scriptopen && return n(:scripttext, Before(b"</script>"))
-#     n.token.kind == :tagopen && return n(:text, Before(b"<"))
-#     isspace ≺ n && return n(:ws, Before(!isspace))
-#     n(:unknown)
+# function next(::HTMLTokens, n::Token)
+#     # b"<!-" / n && return n / :comment / b"-->"
+#     # b"<!" / n && return n / :doctype / UInt8('>')
+# #     b"</" ≺ n && return n(:tagclose, '>')
+# #     b"<script" ≺ n && return n(:scriptopen, '>')
+# #     b"<" ≺ n && return n(:tagopen, '>')
+# #     n.token.kind == :scriptopen && return n(:scripttext, Before(b"</script>"))
+# #     n.token.kind == :tagopen && return n(:text, Before(b"<"))
+# #     isspace ≺ n && return n(:ws, Before(!isspace))
+#     # n / :unknown / 1
 # end
 
 # #-----------------------------------------------------------------------------# XMLTokens
