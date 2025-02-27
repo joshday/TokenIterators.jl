@@ -4,7 +4,7 @@ using StyledStrings, StringViews
 
 import Base: startswith, findfirst, findnext, ∈
 
-export Token, Next, JSONTokens, HTMLTokens,
+export Token, Next, JSONTokens, HTMLTokens, XMLTokens,
     next, next_data, rules, findj, isfirst, isbyte, nbytes, →, ¬
 
 #-----------------------------------------------------------------------------# utils
@@ -182,6 +182,7 @@ function findj(b::Before{<:Data}, data::Data, i)
     rng = findnext(b.x, data, i)
     isnothing(rng) ? length(data) : first(rng) - 1
 end
+findj(x::Data, data::Data, i) = last(findnext(x, data, i))
 
 # findj for SData
 findj(x::UseStringView, d::Data, i) = findj(x.x, StringView(d), i)
@@ -234,6 +235,19 @@ function next(n::Token{HTMLTokens})
     end
     @tryrule n :whitespace ∿(isspace) → ≺(∿(!isspace))
     @tryrule n :equals '='
+    @tryrule n :text Unknown() → ≺('<')
+    @dorule n :unknown Unknown()
+end
+
+#-----------------------------------------------------------------------------# XMLTokens
+struct XMLTokens end
+function next(n::Token{XMLTokens})
+    @tryrule n :pi b"<?" → b"?>"
+    @tryrule n :cdata b"<![" → b"]]>"
+    @tryrule n :close_tag b"</" → '>'
+    @tryrule n :comment b"<!--" → b"-->"
+    @tryrule n :open_tag '<' → '>'
+    @tryrule n :whitespace ∿(isspace) → ≺(∿(!isspace))
     @tryrule n :text Unknown() → ≺('<')
     @dorule n :unknown Unknown()
 end
