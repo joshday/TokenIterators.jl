@@ -1,6 +1,6 @@
 module Tokenizers
 
-using StyledStrings, StringViews, Parsers
+using StyledStrings, StringViews
 
 import Base: startswith, findfirst, findnext, ∈
 
@@ -207,7 +207,7 @@ function next(n::Token{JSONTokens})
     @tryrule n :string '"' → (¬('\\'), '"')
     @tryrule n :number (∈(b"-0123456789")) → ≺(∉(b"-+eE.0123456789"))
     @tryrule n :whitespace (∈(b"\t\n\r ")) → ≺(∉(b"\t\n\r "))
-    @tryrule n :unkown Unknown()
+    @dorule n :unkown Unknown()
 end
 
 #-----------------------------------------------------------------------------# HTMLTokens
