@@ -6,7 +6,7 @@ import Base: startswith, findfirst, findnext, /, tail
 
 export Token, State,
     JSONTokens, HTMLTokens, XMLTokens,
-    Before, Not, First, Last, ≺, ¬, ←, →, ⋆, ≛, ≀, ∷, ≪,
+    Before, Not, First, Last, ≺, ¬, ←, →, ⋆, ≛, ≪, 𝑠,
     next, is, isfirst, _findnext
 
 #-----------------------------------------------------------------------------# utils
@@ -15,7 +15,7 @@ const SData = AbstractString
 
 
 #-----------------------------------------------------------------------------# Selectors
-for (Sel, sym) in (:Before => :≺, :First => :←, :Last => :→, :Not => :¬)
+for (Sel, sym) in (:Before => :≺, :First => :←, :Last => :→, :Not => :¬, :UseStringView => :𝑠)
     @eval (struct $Sel{T} x::T end; $sym(x) = $Sel(x))
 end
 
@@ -34,16 +34,18 @@ end
 
 # Fallback methods
 @inline isfirst(x, d) = is(x, first(d))
+@inline isfirst(o::UseStringView, d) = isfirst(o.x, StringView(d))
 @inline _findnext(arg, data, i) = findnext(is(arg), data, i)
+@inline _findnext(o::UseStringView, data, i) = findnext(is(o.x), StringView(data), i)
 
-@inline isfirst(x::AbstractVector, d::Data) = all(is(x)(d) for (x,d) in zip(x,d))
+@inline isfirst(x::AbstractVector, d) = all(is(x)(d) for (x,d) in zip(x,d))
 @inline _findnext(x::AbstractVector, d, i) = findnext(x, d, i)
 
 @inline isfirst(t::Tuple, d) = isempty(t) ? true : is(t[1], d[1]) && isfirst(tail(t), @view(d[2:end]))
 @inline _findnext(t::Tuple, d, i) = (j = _findnext(t[1], d,i); isfirst(t, @view(d[j:end])) ? j + length(t) - 1 : _findnext(t, d, j + 1))
 
 # Selectors that only work with _findnext
-@inline _findnext(j::Integer, d, i) = j
+@inline _findnext(j::Int, d, i) = j
 @inline _findnext(f::First, d, i) = (rng = _findnext(f.x, d, i); isnothing(rng) ? nothing : first(rng))
 @inline _findnext(f::Last, d, i) =  (rng = _findnext(f.x, d, i); isnothing(rng) ? nothing : last(rng))
 @inline _findnext(b::Before, d, i) = (j = _findnext(b.x, d, i); isnothing(j) ? length(d) : j - 1)
@@ -71,17 +73,7 @@ Token(data, kind, state=nothing) = Token(data, kind, 1, 0, state)
 ≛(t::Token{T,K,S}, k::K) where {T,K,S} = Token(t.data, k, t.i, t.i, t.state)
 ⋆(t::Token{T,K,S}, s::State) where {T,K,S} = Token(t.data, t.kind, t.i, t.j, s(t.state))
 ⋆(t::Token{T,K,S}, x) where {T,K,S} = Token(t.data, t.kind, t.i, t.i - 1 + _findnext(x, t, 2), t.state)
-≀(t::Token{T,K,S}, x) where {T,K,S} = Token(t.data, t.kind, t.i, t.i - 1 + _findnext(x, StringView(t), 2), t.state)
-
-
-# ⋆(t::Token{T,K,S}, x::R) where {T,K,S,R} = Token(t.data, t.kind, t.i, t.i - 1 + _findnext(x, t, 2), t.state)
-# ⋆(t::Token{T,K,S}, x::UseStringView) where {T,K,S} = Tokne(t.data, t.kind, t.i, t.i - 1 + _findnext(x, StringView(t), 2))
-# ⋆(t::UseStringView{Token{T,K,S}}, x::R) where {T,K,S,R} = Token(t.data, t.kind, t.i, t.i - 1 + _findnext(x, StringView(t), 2), t.state)
-# ≀(t::Token{T,K,S}, x) where {T,K,S} = UseStringView(t) ⋆ x
-# ⋆(t::Token{T,K,S}, k::K) where {T,K,S} = Token(t.data, k, t.i, t.j, t.state)
-# ⋆(t::Token{T,K,S}, s::State) where {T,K,S} = Token(t.data, t.kind, t.i, t.j, s(t.state))
-# ≛(t::Token, k) = Token(t.data, k, t.i, t.i, t.state)
-
+# ≀(t::Token{T,K,S}, x) where {T,K,S} = Token(t.data, t.kind, t.i, t.i - 1 + _findnext(x, StringView(t), 2), t.state)
 
 Base.view(t::Token) = view(t.data, t.i:t.j)
 StringViews.StringView(t::Token) = StringView(view(t))
@@ -180,7 +172,7 @@ struct HTMLTokens{T <: Data} <: Tokenizer{T, Symbol, @NamedTuple{style::Bool, sc
     data::T
 end
 function next(o::HTMLTokens, n)
-    ∈(b" \t\n\r") ≪ n && return n ⋆ :whitespace ⋆ ≺(∉(b" \t\n\r"))
+    𝑠(isspace) ≪ n && return n ⋆ :whitespace ⋆ ≺(𝑠(!isspace))
     # state tag=true
     b"<script" ≪ n && return n ⋆ :open_tag_start ⋆ ≺(∈(b" >")) ⋆ State(script=true, tag=true)
     b"<style" ≪ n && return n ⋆ :open_tag_start ⋆ ≺(∈(b" >")) ⋆ State(script=true, tag=true)
@@ -204,7 +196,7 @@ struct XMLTokens{T <: Data} <: Tokenizer{T, Symbol, Bool}
     data::T
 end
 function next(o::XMLTokens, n::Token)
-    ∈(b" \t\n\r") ≪ n && return n ⋆ :whitespace ⋆ ≺(∉(b" \t\n\r"))
+    𝑠(isspace) ≪ n && return n ⋆ :whitespace ⋆ ≺(𝑠(!isspace))
     if n.state  # in_tag
         '=' ≪ n && return n ≛ :equals
         '"' ≪ n && return n ⋆ :attr_val ⋆ '"'

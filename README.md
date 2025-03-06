@@ -113,3 +113,4 @@ where `Tokenizers._findfirst` is used to avoid piracy with `Base.findfirst`.  To
 `First` | `←` | `\leftarrow` | The first byte of the pattern match
 `Last` | `→` | `\rightarrow` | The last byte of the pattern match
 `Not` | `¬` | `\neg` | Match anything but a given pattern
+`UseStringView` | `𝑠` | `\its` | Match on a `StringView` of the data
