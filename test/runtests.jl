@@ -1,7 +1,7 @@
-using Tokenizers
+using TokenIterators
 using Test
 
-@testset "Tokenizers.jl" begin
+@testset "TokenIterators.jl" begin
     @testset "Patterns" begin
         @test isfirst(0x0, [0x0])
         @test isfirst('a', [UInt8('a')])

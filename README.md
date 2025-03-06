@@ -1,26 +1,26 @@
-# Tokenizers
+# TokenIterators
 
-[![Build Status](https://github.com/joshday/Tokenizers.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/joshday/Tokenizers.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Build Status](https://github.com/joshday/TokenIterators.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/joshday/TokenIterators.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
 
-Tokenizers.jl provides tools for building tokenizers, with a few built-ins.  It's super fast and easy to use.
+TokenIterators.jl provides tools for building TokenIterators, with a few built-ins.  It's super fast and easy to use.
 
 ## Usage
 
 ```julia
-using Tokenizers
+using TokenIterators
 
 t = JSONTokens(read("test/data/elements.json"))
 
 first(t, 20)
 ```
 
-<img src="https://private-user-images.githubusercontent.com/8075494/420064235-72db3fe5-012a-4542-94d0-c7b865ce54de.png?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NDEyOTAwNzgsIm5iZiI6MTc0MTI4OTc3OCwicGF0aCI6Ii84MDc1NDk0LzQyMDA2NDIzNS03MmRiM2ZlNS0wMTJhLTQ1NDItOTRkMC1jN2I4NjVjZTU0ZGUucG5nP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI1MDMwNiUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNTAzMDZUMTkzNjE4WiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9YWY4M2Y3ODk1NmRjM2ViMTcxYjA0YmE0NjA0ZTA0NDkyNGRjYjU0M2JmYzRiZWQzNTc1Y2I4ODgwNjY0ZGVlOSZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.0Uhu_Mq26GfwdRMiT5ICTJZ3U8FI1VRslxeKksWmXsg" alt="Tokenizers.jl example" height="300px">
+<img src="https://private-user-images.githubusercontent.com/8075494/420064235-72db3fe5-012a-4542-94d0-c7b865ce54de.png?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NDEyOTAwNzgsIm5iZiI6MTc0MTI4OTc3OCwicGF0aCI6Ii84MDc1NDk0LzQyMDA2NDIzNS03MmRiM2ZlNS0wMTJhLTQ1NDItOTRkMC1jN2I4NjVjZTU0ZGUucG5nP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI1MDMwNiUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNTAzMDZUMTkzNjE4WiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9YWY4M2Y3ODk1NmRjM2ViMTcxYjA0YmE0NjA0ZTA0NDkyNGRjYjU0M2JmYzRiZWQzNTc1Y2I4ODgwNjY0ZGVlOSZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.0Uhu_Mq26GfwdRMiT5ICTJZ3U8FI1VRslxeKksWmXsg" alt="TokenIterators.jl example" height="300px">
 
 
-## Building New Tokenizers
+## Building New TokenIterators
 
-Using Tokenizers.jl is best seen through example.  Here is a full implementation of a JSON Tokenizer:
+Using TokenIterators.jl is best seen through example.  Here is a full implementation of a JSON Tokenizer:
 
 ```julia
 struct JSONTokens{T <: AbstractVector{UInt8}} <: Tokenizer{T, Symbol, Nothing}
@@ -105,7 +105,7 @@ Any `pattern` used in the mini-DSL must satisfy:
 
 > If `pattern ≪ tok` then `first(_findfirst(pattern, data, 1)) == 1`
 
-where `Tokenizers._findfirst` is used to avoid piracy with `Base.findfirst`.  Tokenizers.jl offers several composable types with shorthand notation for specifying patterns.
+where `TokenIterators._findfirst` is used to avoid piracy with `Base.findfirst`.  TokenIterators.jl offers several composable types with shorthand notation for specifying patterns.
 
 | Type | Symbol | Tab-Completion | Description |
 |------|--------|----------------|-------------|

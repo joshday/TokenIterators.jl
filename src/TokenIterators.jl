@@ -1,4 +1,4 @@
-module Tokenizers
+module TokenIterators
 
 using StyledStrings, StringViews
 
