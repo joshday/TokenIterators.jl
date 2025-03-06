@@ -3,7 +3,7 @@
 [![Build Status](https://github.com/joshday/Tokenizers.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/joshday/Tokenizers.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
 
-Tokenizers.jl provides tools for building tokenizers, with a few built-ins.
+Tokenizers.jl provides tools for building tokenizers, with a few built-ins.  It's super fast and easy to use.
 
 ## Usage
 
