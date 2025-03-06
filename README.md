@@ -103,7 +103,7 @@ The length of the token is the index *before* where the function `∉(b"-+eE.012
 
 Any `pattern` used in the mini-DSL must satisfy:
 
-> If `pattern ≪ tok` then `first(_findfirst(pattern, data, i))`
+> If `pattern ≪ tok` then `first(_findfirst(pattern, data, 1)) == 1`
 
 where `Tokenizers._findfirst` is used to avoid piracy with `Base.findfirst`.  Tokenizers.jl offers several composable types with shorthand notation for specifying patterns.
 
