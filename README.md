@@ -7,6 +7,18 @@ Tokenizers.jl provides tools for building tokenizers based on [finite-state mach
 
 ## Usage
 
+```julia
+using Tokenizers
+
+t = JSONTokens(read("test/data/elements.json"))
+
+first(t, 20)
+```
+
+![](https://private-user-images.githubusercontent.com/8075494/420064235-72db3fe5-012a-4542-94d0-c7b865ce54de.png?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NDEyOTAwNzgsIm5iZiI6MTc0MTI4OTc3OCwicGF0aCI6Ii84MDc1NDk0LzQyMDA2NDIzNS03MmRiM2ZlNS0wMTJhLTQ1NDItOTRkMC1jN2I4NjVjZTU0ZGUucG5nP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI1MDMwNiUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNTAzMDZUMTkzNjE4WiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9YWY4M2Y3ODk1NmRjM2ViMTcxYjA0YmE0NjA0ZTA0NDkyNGRjYjU0M2JmYzRiZWQzNTc1Y2I4ODgwNjY0ZGVlOSZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.0Uhu_Mq26GfwdRMiT5ICTJZ3U8FI1VRslxeKksWmXsg)
+
+## Building New Tokenizers
+
 Using Tokenizers.jl is best seen through example.  Here is a full implementation of a JSON Tokenizer:
 
 ```julia
