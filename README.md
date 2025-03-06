@@ -3,7 +3,7 @@
 [![Build Status](https://github.com/joshday/Tokenizers.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/joshday/Tokenizers.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
 
-Tokenizers.jl provides tools for building tokenizers based on [finite-state machines](https://en.wikipedia.org/wiki/Finite-state_machine).  It implements a mini [DSL](https://en.wikipedia.org/wiki/Domain-specific_language) for identifying/emitting tokens.
+Tokenizers.jl provides tools for building tokenizers, with a few built-ins.
 
 ## Usage
 
@@ -105,7 +105,7 @@ Any `pattern` used in the mini-DSL must satisfy:
 
 > If `pattern ≪ tok` then `first(_findfirst(pattern, data, i))`
 
-where `Tokenizers._findfirst` is used to avoid piracy with `Base.findfirst`.  Tokenizers.jl offers several types with shorthand notation for specifying patterns.
+where `Tokenizers._findfirst` is used to avoid piracy with `Base.findfirst`.  Tokenizers.jl offers several composable types with shorthand notation for specifying patterns.
 
 | Type | Symbol | Tab-Completion | Description |
 |------|--------|----------------|-------------|
