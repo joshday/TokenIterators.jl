@@ -86,7 +86,7 @@ init(::Type{NT}) where {NT <: NamedTuple} = NT(init.(NT.types))
 init(::Type{T}) where {T} = typemin(T)
 init(::Type{T}) where {T <: Number} = one(T)
 
-
+Base.read(file::AbstractString, ::Type{T}) where {T <: Tokenizer} = T(read(file))
 
 token_error(n::Token) = error(styled"""
     {bright_red:No Token Identified in $(summary(n.data)) at position $(n.i)
