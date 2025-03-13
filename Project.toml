@@ -1,7 +1,7 @@
 name = "TokenIterators"
 uuid = "c6f4ec34-39d0-4d8f-98bd-3b6eb0e88111"
 authors = ["Josh Day <emailjoshday@gmail.com> and contributors"]
-version = "0.0.1"
+version = "0.1.0"
 
 [deps]
 StringViews = "354b36f9-a18e-4713-926e-db85100087ba"
