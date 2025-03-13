@@ -161,9 +161,9 @@ _findnext(r::Rule, data, i) = _findnext(r.to, data, i)
 const STRING = '"' --> u('"')
 const NUMBER = ∈(b"-0123456789") --> ≺(∉(b"-+eE.0123456789"))
 const ASCII_WHITESPACE = ∈(b" \t\r\n") --> ≺(∉(b" \t\r\n"))
-const ASCII_WORD = ∈(UInt8('A'):UInt8('z')) --> ≺(∉(UInt8('A'):UInt8('z')))
+const ASCII_LETTERS = ∈(UInt8('A'):UInt8('z')) --> ≺(∉(UInt8('A'):UInt8('z')))
 
-const WORD = 𝑠(isletter) --> ≺(𝑠(!isletter))
+const LETTERS = 𝑠(isletter) --> ≺(𝑠(!isletter))
 const WHITESPACE = 𝑠(isspace) --> ≺(𝑠(!isspace))
 
 #-----------------------------------------------------------------------------# @tryrule(s)
@@ -235,13 +235,14 @@ struct DelimFileTokens{T <: Data} <: TokenIterator{T, Symbol, Int}
     data::T
     delim::Char
 end
+DelimFileTokens(data) = DelimFileTokens(data, ',')
 init(::DelimFileTokens, state::Int) = 1
 next(o::DelimFileTokens, n::Token) = @tryrules begin
     whitespace  = WHITESPACE
     delim       = o.delim --> 1
     colon       = ':' --> 1
     string      = STRING
-    word        = WORD
+    word        = LETTERS
     number      = NUMBER
     unknown     = true --> 1
 end

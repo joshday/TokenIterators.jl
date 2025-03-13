@@ -1,5 +1,6 @@
 using TokenIterators
 using Test
+using Downloads: download
 
 @testset "TokenIterators.jl" begin
     @testset "Patterns" begin
@@ -36,7 +37,7 @@ using Test
             tokkinds = [x.kind for x in JSONTokens(data)]
             @test tokkinds == kinds
         end
-        for url in [
+        @test_nowarn for url in [
                 "https://raw.githubusercontent.com/clojure/data.json/refs/heads/master/dev-resources/1000-null.json"
                 "https://raw.githubusercontent.com/clojure/data.json/refs/heads/master/dev-resources/1000-numbers.json"
                 "https://raw.githubusercontent.com/clojure/data.json/refs/heads/master/dev-resources/1000-strings.json"
@@ -46,6 +47,40 @@ using Test
             data = read(file)
             t = JSONTokens(data)
             collect(t)
+        end
+    end
+
+    @testset "HTMLTokens" begin
+        @test_nowarn for url in ["https://github.com", "https://google.com"]
+            collect(HTMLTokens(read(download(url))))
+        end
+    end
+
+    @testset "XMLTokens" begin
+        @test_nowarn for url in [
+                "https://developers.google.com/static/kml/documentation/KML_Samples.kml"
+                "https://schemas.opengis.net/kml/2.2.0/ogckml22.xsd"
+            ]
+            collect(XMLTokens(read(download(url))))
+        end
+    end
+
+    @testset "DelimFileTokens" begin
+        @test_nowarn for url in [
+                "https://raw.githubusercontent.com/JuliaData/CSV.jl/refs/heads/main/test/testfiles/FL_insurance_sample.csv"
+            ]
+            collect(DelimFileTokens(read(download(url))))
+        end
+    end
+
+    @testset "CharFunTokens" begin
+        @test_nowarn for url in [
+                "https://raw.githubusercontent.com/JuliaData/CSV.jl/refs/heads/main/test/testfiles/FL_insurance_sample.csv"
+            ]
+            data = read(download(url))
+            collect(CharFunTokens(data, isletter))
+            collect(CharFunTokens(data, isascii))
+            collect(CharFunTokens(data, islowercase))
         end
     end
 end
