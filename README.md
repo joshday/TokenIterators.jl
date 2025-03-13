@@ -3,10 +3,11 @@
 [![Build Status](https://github.com/joshday/TokenIterators.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/joshday/TokenIterators.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
 
-TokenIterators.jl provides tools for building TokenIterators, with a few built-ins.  It's super fast and easy to use.
+TokenIterators.jl provides easy syntax for writing lexers/tokenizers, with a few built-ins.  It's super fast and easy to use.
 
 > [!IMPORTANT]
-> This package is not designed for validating syntax.  Iterators can have odd behavior with ill-formmed data.
+> - This package is not designed for validating syntax.
+> - There's no guarantee that a token is the "smallest meaningful unit"
 
 
 ## Usage
@@ -77,7 +78,7 @@ next(o::JSONTokens, n::Token) = @tryrules begin
     var"true"       = 't' --> 4
     var"false"      = 'f' --> 5
     var"null"       = 'n' --> 4
-    string          = STRING            # '"'                -->  →((¬('\\'), '"'))
+    string          = STRING            # '"'                -->  Unescaped('"')
     number          = NUMBER            # ∈(b"-0123456789")  -->  ≺(∉(b"-+eE.0123456789"))
     whitespace      = ASCII_WHITESPACE  #  ∈(b" \t\r\n")     -->  ≺(∉(b" \t\r\n"))
 end
@@ -122,8 +123,8 @@ Patterns in the DSL determine how the token is identified in `data::AbstractVect
 The `STRING`, `NUMBER`, and `ASCII_WHITESPACE` patterns from the JSONTokens example are interpreted as:
 
 ```julia
-# STRING: Token begins with UInt8('"') and ends at the last index of a sequence that matches any character other than '\\' followed by '"'
-'"' --> →((¬('\\'), '"'))
+# STRING: Token begins with UInt8('"') and ends at UInt8('"') (excluding escaped '"')
+'"' --> Unescaped('"')
 
 # NUMBER: Token begins with any byte in b"-0123456789" and ends at the index before the first byte that is not in b"-+eE.0123456789"
 ∈(b"-0123456789")  -->  ≺(∉(b"-+eE.0123456789"))
