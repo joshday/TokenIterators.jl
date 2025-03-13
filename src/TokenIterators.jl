@@ -4,7 +4,7 @@ using StyledStrings, StringViews
 
 import Base: startswith, findfirst, findnext, !, tail, |, +, -
 
-export Token, State, Rule,
+export Token, State, Rule, FSM,
     JSONTokens, HTMLTokens, XMLTokens, DelimFileTokens, CharFunTokens,
     Before, Not, First, Last, ≺, ¬, ←, →, ⋆, ≛, ≪, 𝑠, -->, ..,
     next, is, isfirst, _findnext, init, transition
@@ -60,23 +60,23 @@ after(t::Token) = Token(t.data, t.kind, t.j + 1, length(t.data), t.state)
 
 
 #-----------------------------------------------------------------------------# tizer
-abstract type Tokenizer{T, K, S} end
-Base.show(io::IO, o::Tokenizer) = print(io, typeof(o).name.name, " ($(summary(o.data)))")
+abstract type TokenIterator{T, K, S} end
+Base.show(io::IO, o::TokenIterator) = print(io, typeof(o).name.name, " ($(summary(o.data)))")
 
-Base.IteratorSize(::Type{T}) where {T <: Tokenizer} = Base.SizeUnknown()
-Base.eltype(::Type{Tok}) where {T, K, S, Tok <: Tokenizer{T, K, S}} = Token{T, K, S}
-Base.isdone(o::Tokenizer, prev::Token) = prev.j == length(prev.data)
+Base.IteratorSize(::Type{T}) where {T <: TokenIterator} = Base.SizeUnknown()
+Base.eltype(::Type{Tok}) where {T, K, S, Tok <: TokenIterator{T, K, S}} = Token{T, K, S}
+Base.isdone(o::TokenIterator, prev::Token) = prev.j == length(prev.data)
 
-function Base.iterate(o::Tokenizer, prev = init(o))
+function Base.iterate(o::TokenIterator, prev = init(o))
     Base.isdone(o, prev) && return nothing
     n = next(o, after(prev))
     return n, n
 end
 
-init(t::Tokenizer{T,K,S}) where {T,K,S} = Token(t.data, init_kind(t), 1, 0, init_state(t))
+init(t::TokenIterator{T,K,S}) where {T,K,S} = Token(t.data, init_kind(t), 1, 0, init_state(t))
 
-init_kind(t::Tokenizer{T,K,S}) where {T,K,S} = init(K)
-init_state(t::Tokenizer{T,K,S}) where {T,K,S} = init(S)
+init_kind(t::TokenIterator{T,K,S}) where {T,K,S} = init(K)
+init_state(t::TokenIterator{T,K,S}) where {T,K,S} = init(S)
 
 init(::Type{Symbol}) = :init
 init(::Type{Nothing}) = nothing
@@ -86,7 +86,7 @@ init(::Type{NT}) where {NT <: NamedTuple} = NT(init.(NT.types))
 init(::Type{T}) where {T} = typemin(T)
 init(::Type{T}) where {T <: Number} = one(T)
 
-Base.read(file::AbstractString, ::Type{T}) where {T <: Tokenizer} = T(read(file))
+Base.read(file::AbstractString, ::Type{T}) where {T <: TokenIterator} = T(read(file))
 
 token_error(n::Token) = error(styled"""
     {bright_red:No Token Identified in $(summary(n.data)) at position $(n.i)
@@ -96,7 +96,7 @@ token_error(n::Token) = error(styled"""
     }""")
 
 #-----------------------------------------------------------------------------# Selectors
-for (Sel, sym) in (:Before => :≺, :First => :←, :Last => :→, :Not => :¬, :UseStringView => :𝑠)
+for (Sel, sym) in (:Before => :≺, :First => :←, :Last => :→, :Not => :¬, :UseStringView => :𝑠, :Unescaped => :u)
     @eval (struct $Sel{T} x::T end; $sym(x) = $Sel(x))
 end
 
@@ -135,6 +135,14 @@ findnextind(x, t::Token, i) = (j = _findnext(x, t, i); isnothing(j) ? length(t.d
 @inline _findnext(f::First, d, i) = (rng = _findnext(f.x, d, i); isnothing(rng) ? nothing : first(rng))
 @inline _findnext(f::Last, d, i) =  (rng = _findnext(f.x, d, i); isnothing(rng) ? nothing : last(rng))
 @inline _findnext(b::Before, d, i) = (j = _findnext(b.x, d, i); isnothing(j) ? length(d) : j - 1)
+@inline function _findnext(u::Unescaped, d, i)
+    skip = false
+    for j in i:length(d)
+        c = Char(d[j])
+        c == u.x && !skip && return j
+        skip = c == '\\' ? !skip : false
+    end
+end
 
 
 #-----------------------------------------------------------------------------# Rule
@@ -150,7 +158,7 @@ _findnext(r::Rule, data, i) = _findnext(r.to, data, i)
 
 |(t::Token{T,K,S}, r::Rule) where {T, K, S} = t | r.to
 
-const STRING = '"' --> →((¬('\\'), '"'))
+const STRING = '"' --> u('"')
 const NUMBER = ∈(b"-0123456789") --> ≺(∉(b"-+eE.0123456789"))
 const ASCII_WHITESPACE = ∈(b" \t\r\n") --> ≺(∉(b" \t\r\n"))
 const ASCII_WORD = ∈(UInt8('A'):UInt8('z')) --> ≺(∉(UInt8('A'):UInt8('z')))
@@ -171,12 +179,12 @@ macro tryrules(ex, token=:(n))
     exprs = map(ex.args) do x
         tryrule_ex(QuoteNode(x.args[1]), x.args[2], token)
     end
-    e = Expr(:block, exprs..., :(token_error(token)))
+    e = Expr(:block, exprs..., :(token_error($token)))
     return esc(e)
 end
 
 #-----------------------------------------------------------------------------# JSONTokens
-struct JSONTokens{T <: Data} <: Tokenizer{T, Symbol, Nothing}
+struct JSONTokens{T <: Data} <: TokenIterator{T, Symbol, Nothing}
     data::T
 end
 
@@ -196,7 +204,7 @@ next(o::JSONTokens, n::Token) = @tryrules begin
 end
 
 #-----------------------------------------------------------------------------# HTMLTokens
-struct HTMLTokens{T <: Data} <: Tokenizer{T, Symbol, Nothing}
+struct HTMLTokens{T <: Data} <: TokenIterator{T, Symbol, Nothing}
     data::T
 end
 next(t::HTMLTokens, n::Token) = @tryrules begin
@@ -209,7 +217,7 @@ next(t::HTMLTokens, n::Token) = @tryrules begin
 end
 
 #-----------------------------------------------------------------------------# XMLTokens
-struct XMLTokens{T <: Data} <: Tokenizer{T, Symbol, Bool}
+struct XMLTokens{T <: Data} <: TokenIterator{T, Symbol, Bool}
     data::T
 end
 next(o::XMLTokens, n::Token) = @tryrules begin
@@ -223,7 +231,7 @@ next(o::XMLTokens, n::Token) = @tryrules begin
 end
 
 #-----------------------------------------------------------------------------# DelimFileTokens
-struct DelimFileTokens{T <: Data} <: Tokenizer{T, Symbol, Int}
+struct DelimFileTokens{T <: Data} <: TokenIterator{T, Symbol, Int}
     data::T
     delim::Char
 end
@@ -239,7 +247,7 @@ next(o::DelimFileTokens, n::Token) = @tryrules begin
 end
 
 #-----------------------------------------------------------------------------# CharFunTokens
-struct CharFunTokens{T, F, K} <: Tokenizer{T, K, Nothing}
+struct CharFunTokens{T, F, K} <: TokenIterator{T, K, Nothing}
     data::T
     f::F
 end

@@ -40,10 +40,12 @@ using Test
                 "https://raw.githubusercontent.com/clojure/data.json/refs/heads/master/dev-resources/1000-null.json"
                 "https://raw.githubusercontent.com/clojure/data.json/refs/heads/master/dev-resources/1000-numbers.json"
                 "https://raw.githubusercontent.com/clojure/data.json/refs/heads/master/dev-resources/1000-strings.json"
+                "https://github.com/plotly/plotly.js/raw/v3.0.1/dist/plot-schema.json"
             ]
             file = download(url)
             data = read(file)
-            collect(JSONTokens(data))
+            t = JSONTokens(data)
+            collect(t)
         end
     end
 end
