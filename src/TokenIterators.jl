@@ -42,19 +42,6 @@ Base.show(io::IO, t::Token) = show(io, MIME("text/plain"), t)
 
 after(t::Token) = Token(t.data, t.kind, t.j + 1, length(t.data))
 
-# Failure to identify token from `data` at position `i`.  Error prints `nchars` on both sides of `data[i]`.
-function token_error(data::Data, i::Int, nchars=30)
-    sv = StringView(data)
-    pre = escape_string(sv[max(1, i - nchars):i - 1])
-    c = escape_string(string(sv[i]))
-    post = escape_string(sv[i + 1:min(i + nchars, end)])
-    error(styled"""
-    {bright_red:No Token Identified in $(summary(data)) beginning at position $i}
-
-    {bright_black:$pre}{{inverse:{bright_red:$c}}{bright_black:$post}
-    """)
-end
-
 (t::Token)(kind, len::Integer = 1) = Token(t.data, kind, t.i, t.i + len - 1)
 
 
@@ -74,6 +61,32 @@ function Base.iterate(o::TokenIterator, prev = init(o))
 end
 
 init(o::TokenIterator) = Token(o.data)
+
+#-----------------------------------------------------------------------------# debugging
+# Failure to identify token from `data` at position `i`.  Error prints `nchars` on both sides of `data[i]`.
+function token_error(data::Data, i::Int, nchars=50)
+    sv = StringView(data)
+    pre = escape_string(sv[max(1, i - nchars):i - 1])
+    c = escape_string(string(sv[i]))
+    post = escape_string(sv[i + 1:min(i + nchars, end)])
+    error(styled"""
+    {bright_red:No Token Identified in $(summary(data)) beginning at position $i}
+
+    {bright_black:$pre}{{inverse:{bright_red:$c}}{bright_black:$post}
+    """)
+end
+
+function debug(t::TokenIterator)
+    tok = nothing
+    try
+        for ti in t
+            tok = ti
+        end
+    catch
+        token_error(tok.data, tok.j + 1)
+    end
+    @info "success!"
+end
 
 #-----------------------------------------------------------------------------# @trytok
 macro trytok(n, kind, rule)
