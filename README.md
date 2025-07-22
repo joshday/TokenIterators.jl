@@ -67,7 +67,7 @@ The iteration interface is based on finding the next Token based on the current 
 2. Identify the kind of the next token via a *starting pattern*.
 3. Determine the last index of the next token via `findnext` on an *ending pattern*.
 
-![](https://github.com/user-attachments/assets/d990d454-ac15-45da-a035-01b3f6987582)
+![](https://github.com/user-attachments/assets/da24efee-c1d8-4bf0-b6fe-ba2009798db1)
 
 
 ## An Example: JSONTokens
