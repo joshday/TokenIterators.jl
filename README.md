@@ -44,7 +44,7 @@ Both `TokenIterator{T,K}` and `Token{T,K}` are parameterized by:
 1. The input data type `T <: AbstractVector{UInt8}`
 2. The type used to label the kind of token `K`.
 
-A `Token` acts like a view of the input data.  It's defined as:
+A `Token` acts like a `view(data, i:j)`.  It's defined as:
 
 ```julia
 struct Token{T <: AbstractVector{UInt8}, K} <: AbstractVector{UInt8}
