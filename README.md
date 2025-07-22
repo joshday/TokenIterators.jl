@@ -62,6 +62,8 @@ end
 
 A rule for identifying a `Token` is defined by a starting pattern and ending pattern.  The interface is designed to be as intuitive and nearly human-readable.  Usage is best seen through example:
 
+![](https://github.com/user-attachments/assets/d990d454-ac15-45da-a035-01b3f6987582)
+
 ## An Example: JSONTokens
 
 See `src/TokenIterators.jl` for more `TokenIterator` implementations.
