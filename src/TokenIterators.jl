@@ -2,9 +2,7 @@ module TokenIterators
 
 using StyledStrings, StringViews
 
-import Base: startswith, findfirst, findnext, !, tail, |, +, -
-
-export Token
+import Base: startswith, findnext
 
 export Token, JSONTokens, HTMLTokens, XMLTokens, DelimFileTokens
 
@@ -42,7 +40,10 @@ Base.show(io::IO, t::Token) = show(io, MIME("text/plain"), t)
 
 after(t::Token) = Token(t.data, t.kind, t.j + 1, length(t.data))
 
-(t::Token)(kind, len::Integer = 1) = Token(t.data, kind, t.i, t.i + len - 1)
+function (t::Token)(kind, x=1, skip=2)
+    _j = findnext(x, t, skip)
+    Token(t.data, kind, t.i, t.i + _j - 1)
+end
 
 
 #-----------------------------------------------------------------------------# TokenIterator
@@ -79,103 +80,65 @@ end
 function debug(t::TokenIterator)
     tok = nothing
     try
-        for ti in t
+        for (i, ti) in enumerate(t)
             tok = ti
+            i > length(t.data) && error("Found more tokens than bytes available")
         end
     catch
+        @warn "Probably an infinite loop.  Stopping after $(length(t.data)) tokens."
         token_error(tok.data, tok.j + 1)
     end
     @info "success!"
 end
 
-#-----------------------------------------------------------------------------# @trytok
-macro trytok(n, kind, rule)
-    esc(quote
-        if startswith($n, $rule)
-            return Token($n.data, $kind, $n.i, $n.i + findlen($n, $rule) - 1)
-        end
-    end)
-end
-
 #-----------------------------------------------------------------------------# pattern interface
-
-# Shorthand:
-<<(x, t::Token) = startswith(t, x)
-
-startswith(::Token, b::Bool) = b
-findlen(::Token, b::Bool) = 1
-
-startswith(t::Token, rule::Pair) = startswith(t, rule[1])
-findlen(t::Token, rule::Pair) = findlen(t, rule[1], rule[2])
+Base.:(<<)(x, t::Token) = startswith(t, x)
 
 startswith(t::Token, rule::Char) = StringView(t)[1] == rule
-findlen(::Token, ::Char) = 1
-findlen(t::Token, ::Any, c::Char) = findnext(==(c), StringView(t), 2)
-
-startswith(t::Token, rule::AbstractString) = startswith(StringView(t), rule)
-findlen(t::Token, rule::AbstractString) = length(rule)
-findlen(t::Token, ::Any, rule::AbstractString) = last(findnext(rule, StringView(t), 2))
-
 startswith(t::Token, rule::Regex) = startswith(StringView(t), rule)
-findlen(t::Token, rule::Regex) = 1
-findlen(t::Token, ::Any, rule::Regex) = last(findnext(rule, StringView(t), 2))
-
-
+startswith(t::Token, rule::AbstractString) = startswith(StringView(t), rule)
 startswith(t::Token, rule::Function) = rule(t[1])
-function findlen(t::Token, rule::Function)
-    i = findnext(!rule, t, 2)
-    isnothing(i) ? length(t) : i - 1
-end
-findlen(t::Token, a::Any, b::Function) = findlen(t, b)
-
 startswith(t::Token, rule::Data) = all(ti == bi for (ti, bi) in zip(t, rule))
-findlen(t::Token, rule::Data) = length(rule)
-findlne(t::Token, ::Any, rule::Data) = last(findnext(rule, t, 2))
 
+findnext(f::Function, t::Token, i::Integer) = findnext(f, view(t), i)
+findnext(x::Integer, t::Token, i::Integer) = x
+findnext(x::UInt8, t::Token, i::Integer) = findnext(==(x), t, i)
+findnext(x::Char, t::Token, i::Integer) = findnext(==(x), StringView(t), i)
+findnext(x::AbstractString, t::Token, i::Integer) = findnext(x, StringView(t), i)
+
+
+struct UseStringView{T}
+    x::T
+end
+s(x) = UseStringView(x)
+startswith(t::Token, o::UseStringView{F}) where {F <: Function} = o.x(StringView(t)[1])
+findnext(o::UseStringView, t::Token, i::Integer) = findnext(o.x, StringView(t), i)
+
+# ASCII-only
 struct Unescaped
     char::Char
 end
 u(x) = Unescaped(x)
-function findlen(t::Token, ::Any, rule::Unescaped)
+function findnext(rule::Unescaped, t::Token, i::Integer)
     skip = false
     for (j, byte) in enumerate(t)
-        j == 1 && continue
+        j ≤ i && continue
         c = Char(byte)
         c == rule.char && !skip && return j
         skip = c == '\\' ? !skip : false
     end
+    return length(t)
 end
 
-struct UseStringView{T} <: Function
+struct Last{T}
     x::T
 end
-s(x) = UseStringView(x)
-(f::UseStringView)(x) = f.x(x)
-startswith(t::Token, o::UseStringView{F}) where {F <: Function} = o.x(StringView(t)[1])
-function findlen(t::Token, rule::UseStringView{F}) where {F <: Function}
-    i = findnext(!rule, StringView(t), 2)
-    isnothing(i) ? length(t) : i - 1
-end
-Base.:(!)(o::UseStringView) = UseStringView(!o.x)
-
-struct Unknown end
-startswith(::Token, ::Unknown) = true
-findlen(::Token, ::Unknown) = 1
+findnext(o::Last, t::Token, i::Integer) = last(findnext(o.x, t, i))
 
 struct Before{T}
     x::T
 end
-findlen(t::Token, ::Any, b::Before{<:AbstractString}) = (i = findnext(b.x, UseStringView(t), 2); isnothing(i) ? length(t) : first(i) - 1)
-findlen(t::Token, ::Any, b::Before{<:Data}) = (i = findnext(b.x, view(t), 2); isnothing(i) ? length(t) : first(i) - 1)
-
-#-----------------------------------------------------------------------------# Common rules
-const STRING = '"' => u('"')
-const NUMBER = (∈(b"-0123456789")) => (∈(b"-+eE.0123456789"))
-const ASCII_WHITESPACE = (∈(b" \t\r\n"))
-const ASCII_LETTERS = ∈(UInt8('A'):UInt8('z'))
-const LETTERS = s(isletter)
-const WHITESPACE = s(isspace)
-const DIGITS = s(isdigit)
+findnext(o::Before, t::Token, i::Integer) = (i=findnext(o.x, t, i); isnothing(i) ? length(t) : first(i) - 1)
 
 #-----------------------------------------------------------------------------# JSONTokens
 struct JSONTokens{T} <: TokenIterator{T, Symbol}
@@ -191,9 +154,9 @@ function next(o::JSONTokens, t::Token)
     't' << t && return t(:True, 4)
     'f' << t && return t(:False, 5)
     'n' << t && return t(:null, 4)
-    @trytok t :whitespace (∈(b"\t\n\r "))
-    @trytok t :string STRING
-    @trytok t :number (∈(b"-0123456789")) => (∈(b"-+eE.0123456789"))
+    ∈(b"\t\n\r ") << t && return t(:whitespace, Before(!∈(b"\t\n\r ")))
+    '"' << t && return t(:string, u('"'))
+    ∈(b"-0123456789") << t && return t(:number, Before(!∈(b"-+eE.012345678")))
     return t(:unknown)
 end
 
@@ -203,13 +166,12 @@ struct HTMLTokens{T <: Data} <: TokenIterator{T, Symbol}
     data::T
 end
 function next(o::HTMLTokens, t::Token)
-    @trytok t :whitespace WHITESPACE
-    @trytok t :comment "<!--" => "-->"
-    @trytok t :doctype "<!" => '>'
-    @trytok t :close_tag "</" => '>'
-    @trytok t :open_tag '<' => '>'
-    @trytok t :text true => Before(b"</")
-    return t(:unknown)
+    s(isspace) << t && return t(:whitespace, Before(s(!isspace)))
+    "<!--" << t && return t(:comment, Last("-->"), 5)
+    "<!" << t && return t(:doctype, '>', 10)
+    "</" << t && return t(:close_tag, '>', 3)
+    '<' << t && return t(:open_tag, '>', 3)
+    return t(:text, Before(b"</"))
 end
 
 #-----------------------------------------------------------------------------# XMLTokens
@@ -217,15 +179,14 @@ struct XMLTokens{T <: Data} <: TokenIterator{T, Symbol}
     data::T
 end
 function next(o::XMLTokens, t::Token)
-    @trytok t :whitespace WHITESPACE
-    @trytok t :comment "<!--" => "-->"
-    @trytok t :processing_instruction "<?" => "?>"
-    @trytok t :cdata "<![" => "]]>"
-    @trytok t :doctype "<!" => '>'
-    @trytok t :close_tag "</" => '>'
-    @trytok t :open_tag '<' => '>'
-    @trytok t :text true => Before(b"</")
-    t(:unknown)
+    s(isspace) << t && return t(:whitespace, Before(s(!isspace)))
+    "<!--" << t && return t(:comment, Last("-->"), 5)
+    "<?" << t && return t(:processing_instruction, Last("?>"), 3)
+    "<![" << t && return t(:cdata, Last("]]>"), 10)
+    "<!" << t && return t(:doctype, '>', 10)
+    "</" << t && return t(:close_tag, '>', 4)
+    '<' << t && return t(:open_tag, '>', 3)
+    return t(:text, Before(b"</"))
 end
 
 #-----------------------------------------------------------------------------# DelimFileTokens
@@ -235,12 +196,12 @@ struct DelimFileTokens{T <: Data} <: TokenIterator{T, Symbol}
 end
 DelimFileTokens(data) = DelimFileTokens(data, ',')
 function next(o::DelimFileTokens, t::Token)
-    @trytok t :whitespace WHITESPACE
-    @trytok t :delim o.delim
-    @trytok t :string STRING
-    @trytok t :word LETTERS
-    @trytok t :number NUMBER
-    return t(:unknown)
+    s(isspace) << t && return t(:whitespace, Before(s(!isspace)))
+    delim << t && return t(:delim)
+    '"' << t && return t(:string, u('"'))
+    s(isletter) << t && return t(:word, Before(s(!isletter)))
+    s(isnumeric) << t && return t(:numeric, Before(s(!isnumeric)))
+    t(:unknown)
 end
 
 

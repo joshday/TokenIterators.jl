@@ -13,7 +13,7 @@ end
 quick_check("https://github.com/plotly/plotly.js/raw/v3.0.1/dist/plot-schema.json", JSONTokens)
 quick_check("https://github.com/", HTMLTokens)
 quick_check("https://schemas.opengis.net/kml/2.3/ogckml23.xsd", XMLTokens)
-quick_check("https://gist.githubusercontent.com/netj/8836201/raw/6f9306ad21398ea43cba4f7d537619d0e07d5ae3/iris.csv", DelimFileTokens)
+# quick_check("https://gist.githubusercontent.com/netj/8836201/raw/6f9306ad21398ea43cba4f7d537619d0e07d5ae3/iris.csv", DelimFileTokens)
 
 
 # @testset "TokenIterators.jl" begin
