@@ -58,11 +58,17 @@ end
 > [!TIP]
 > [StringViews.jl](https://github.com/JuliaStrings/StringViews.jl) (used heavily in this package) can provide lightweight AbstractString views of the token via `StringView(t)`.
 
-## Rules
+## Defining Iterators with Rules
 
-A rule for identifying a `Token` is defined by a starting pattern and ending pattern.  The interface is designed to be as intuitive and nearly human-readable.  Usage is best seen through example:
+
+The iteration interface is based on finding the next Token based on the current one in the following steps:
+
+1. Join all the candidate bytes of the next token (everything after the current token).
+2. Identify the kind of the next token via a *starting pattern*.
+3. Determine the last index of the next token via `findnext` on an *ending pattern*.
 
 ![](https://github.com/user-attachments/assets/d990d454-ac15-45da-a035-01b3f6987582)
+
 
 ## An Example: JSONTokens
 
