@@ -118,6 +118,8 @@ findlen(t::Token, ::Any, rule::AbstractString) = last(findnext(rule, StringView(
 
 startswith(t::Token, rule::Regex) = startswith(StringView(t), rule)
 findlen(t::Token, rule::Regex) = 1
+findlen(t::Token, ::Any, rule::Regex) = last(findnext(rule, StringView(t), 2))
+
 
 startswith(t::Token, rule::Function) = rule(t[1])
 function findlen(t::Token, rule::Function)
@@ -128,6 +130,7 @@ findlen(t::Token, a::Any, b::Function) = findlen(t, b)
 
 startswith(t::Token, rule::Data) = all(ti == bi for (ti, bi) in zip(t, rule))
 findlen(t::Token, rule::Data) = length(rule)
+findlne(t::Token, ::Any, rule::Data) = last(findnext(rule, t, 2))
 
 struct Unescaped
     char::Char
