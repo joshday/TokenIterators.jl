@@ -47,11 +47,12 @@ Both `TokenIterator{T,K}` and `Token{T,K}` are parameterized by:
 A `Token` acts like a `view(data, i:j)`.  It's defined as:
 
 ```julia
-struct Token{T <: AbstractVector{UInt8}, K} <: AbstractVector{UInt8}
+struct Token{T <: AbstractVector{UInt8}, K, S} <: AbstractVector{UInt8}
     data::T
     kind::K
     i::Int  # starting index
     j::Int  # closing index
+    state::S
 end
 ```
 
@@ -75,29 +76,29 @@ The iteration interface is based on finding the next Token based on the current 
 See `src/TokenIterators.jl` for more `TokenIterator` implementations.
 
 ```julia
-struct JSONTokens{T} <: TokenIterator{T, Symbol}
+struct JSONTokens{T} <: TokenIterator{T, Symbol, Nothing}
     data::T
 end
 
 function next(o::JSONTokens, t::Token)
-    '{' << t && return t(:curly_open)
-    '}' << t && return t(:curly_close)
-    '[' << t && return t(:square_open)
-    ']' << t && return t(:square_close)
-    ':' << t && return t(:colon)
-    ',' << t && return t(:comma)
-    't' << t && return t(:True, 4)
-    'f' << t && return t(:False, 5)
-    'n' << t && return t(:null, 4)
-    ∈(b"\t\n\r ") << t && return t(:whitespace, Before(!∈(b"\t\n\r ")))
-    '"' << t && return t(:string, u('"'))
-    ∈(b"-0123456789") << t && return t(:number, Before(!∈(b"-+eE.012345678")))
+    '{' .. t && return t(:curly_open)
+    '}' .. t && return t(:curly_close)
+    '[' .. t && return t(:square_open)
+    ']' .. t && return t(:square_close)
+    ':' .. t && return t(:colon)
+    ',' .. t && return t(:comma)
+    't' .. t && return t(:True, 4)
+    'f' .. t && return t(:False, 5)
+    'n' .. t && return t(:null, 4)
+    ∈(b"\t\n\r ") .. t && return t(:whitespace, Before(!∈(b"\t\n\r ")))
+    '"' .. t && return t(:string, u('"'))
+    ∈(b"-0123456789") .. t && return t(:number, Before(!∈(b"-+eE.012345678")))
     return t(:unknown)
 end
 ```
 
 > [!NOTE]
-> - The `x << tok` syntax is shorthand for `startswith(tok, x)`
+> - The `x .. tok` syntax is shorthand for `startswith(tok, x)`
 > - `t(kind, end_pattern, start_idx=2)` returns another Token with the given `kind` and ending position defined via `findnext(end_pattern, tok, start_idx)`
 
 ## Mini-DSL
@@ -123,6 +124,26 @@ end
 `Before` | `Before("<")` | `findnext(==('<'), token, 2) - 1`
 `Last` | `Last("-->")` | `last(findnext("-->", StringView(token), 2))`
 
+## Tokenizer State
+
+Any type can be used to store state for a TokenIterator.  Changing the state is done via the operator:
+
+```julia
+token | function_of_state
+```
+
+We provide several types for common state functions:
+
+```julia
+# Example: Adding two states to a Set{Symbol} or Vector{Symbol}
+token | Push!(:state_to_add) | Push!(:another_state_to_add)
+
+# Example: Removing a state
+token | Pop!()
+
+# Example: deleting a state from a Set{Symbol}
+token | Delete!(:state_to_remove)
+```
 
 ## Performance
 
