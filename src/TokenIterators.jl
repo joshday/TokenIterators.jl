@@ -32,7 +32,7 @@ Base.getindex(t::Token, i::Integer) = getindex(view(t), i)
 
 function Base.show(io::IO, ::MIME"text/plain", t::Token)
     s = styled"$(format(t.i)) → $(format(t.j)) {bright_black:($(Base.format_bytes(length(t))))} " *
-        styled"{bright_yellow:$(t.state)} {bright_cyan:$(t.kind)} "
+        styled"{bright_cyan:$(t.kind)} "
     n = displaysize(io)[2] - length(s) - 1
     _s2 = styled"{inverse:{bright_cyan:$(escape_string(StringView(t)))}}"
     s2 = _s2[1:min(n, end)] * (length(_s2) > n ? styled"{bright_cyan:…}" : "")
