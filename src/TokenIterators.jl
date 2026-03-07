@@ -28,7 +28,7 @@ Base.view(t::Token) = view(t.data, t.i:t.j)
 StringViews.StringView(t::Token) = StringView(view(t))
 Base.length(t::Token) = t.j - t.i + 1
 Base.size(t::Token) = (length(t),)
-Base.getindex(t::Token, i::Integer) = getindex(view(t), i)
+Base.getindex(t::Token, i::Integer) = (@boundscheck checkbounds(t, i); @inbounds t.data[t.i + i - 1])
 
 function Base.show(io::IO, ::MIME"text/plain", t::Token)
     s = styled"$(format(t.i)) → $(format(t.j)) {bright_black:($(Base.format_bytes(length(t))))} " *
@@ -123,7 +123,7 @@ Base.:(>>)(t::Token, i::Integer) = Token(t.data, t.kind, max(1, t.i + i), min(t.
 startswith(t::Token, rule::UInt8) = t[1] == rule
 width(::Token, ::UInt8) = 1
 
-startswith(t::Token, rule::Char) = StringView(t)[1] == rule
+startswith(t::Token, rule::Char) = isascii(rule) ? @inbounds(t.data[t.i]) == UInt8(rule) : StringView(t)[1] == rule
 width(::Token, rule::Char) = ncodeunits(rule)
 
 startswith(t::Token, rule::AbstractString) = startswith(StringView(t), rule)
@@ -132,7 +132,13 @@ width(::Token, rule::AbstractString) = ncodeunits(rule)
 startswith(t::Token, rule::Function) = rule(t[1])
 width(::Token, ::Function) = 1
 
-startswith(t::Token, rule::Data) = all(ti == bi for (ti, bi) in zip(t, rule))
+function startswith(t::Token, rule::Data)
+    length(rule) > length(t) && return false
+    @inbounds for k in eachindex(rule)
+        t.data[t.i + k - 1] != rule[k] && return false
+    end
+    return true
+end
 width(::Token, rule::Data) = length(rule)
 
 startswith(t::Token, rule::Tuple) = isempty(rule) ? true : startswith(t, rule[1]) && startswith(t >> 1, Base.tail(rule))
@@ -141,7 +147,7 @@ width(t::Token, rule::Tuple) = sum(width(t, r) for r in rule)
 findnext(f::Function, t::Token, i::Integer) = findnext(f, view(t), i)
 findnext(x::Integer, t::Token, i::Integer) = x
 findnext(x::UInt8, t::Token, i::Integer) = findnext(==(x), t, i)
-findnext(x::Char, t::Token, i::Integer) = findnext(==(x), StringView(t), i)
+findnext(x::Char, t::Token, i::Integer) = isascii(x) ? findnext(==(UInt8(x)), view(t), i) : findnext(==(x), StringView(t), i)
 findnext(x::AbstractString, t::Token, i::Integer) = findnext(x, StringView(t), i)
 
 
@@ -160,12 +166,12 @@ struct Unescaped
 end
 u(x) = Unescaped(x)
 function findnext(rule::Unescaped, t::Token, i::Integer)
-    skip = false
-    for (j, byte) in enumerate(t)
-        j ≤ i && continue
-        c = Char(byte)
-        c == rule.char && !skip && return j
-        skip = c == '\\' ? !skip : false
+    escaped = false
+    char = UInt8(rule.char)
+    @inbounds for j in (i + 1):length(t)
+        byte = t.data[t.i + j - 1]
+        byte == char && !escaped && return j
+        escaped = byte == UInt8('\\') ? !escaped : false
     end
     return length(t)
 end
@@ -196,7 +202,7 @@ function next(o::JSONTokens, t::Token)
     'n' .. t && return t(:null, 4)
     ∈(b"\t\n\r ") .. t && return t(:whitespace, Before(!∈(b"\t\n\r ")))
     '"' .. t && return t(:string, u('"'))
-    ∈(b"-0123456789") .. t && return t(:number, Before(!∈(b"-+eE.012345678")))
+    ∈(b"-0123456789") .. t && return t(:number, Before(!∈(b"-+eE.0123456789")))
     return t(:unknown)
 end
 

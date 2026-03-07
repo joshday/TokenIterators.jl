@@ -19,6 +19,16 @@ quick_check("https://gist.githubusercontent.com/netj/8836201/raw/6f9306ad21398ea
 
 _token(s) = TokenIterators.after(Token(s))
 
+#-----------------------------------------------------------------------------# JSON number with digit 9
+@testset "JSON numbers with digit 9" begin
+    for num in ["9", "19", "9.5", "1e9", "-99"]
+        tokens = collect(JSONTokens(codeunits(num)))
+        @test length(tokens) == 1
+        @test tokens[1].kind == :number
+        @test StringView(tokens[1]) == num
+    end
+end
+
 
 
 #-----------------------------------------------------------------------------# starting patterns
