@@ -145,6 +145,109 @@ token | Pop!()
 token | Delete!(:state_to_remove)
 ```
 
+## API Reference
+
+### `Token`
+
+```julia
+struct Token{T<:AbstractVector{UInt8}, K} <: AbstractVector{UInt8}
+    data::T   # underlying byte buffer (shared, never copied)
+    kind::K   # user-defined label (e.g. a Symbol or enum variant)
+    i::Int    # first byte index (inclusive)
+    j::Int    # last byte index (inclusive); j < i means empty token
+end
+```
+
+A `Token` is a tagged view into a byte buffer.  It behaves as an
+`AbstractVector{UInt8}` over `data[i:j]`, so standard indexing and iteration
+work directly on the token bytes.  Constructors:
+
+```julia
+Token(data::AbstractVector{UInt8}, kind=nothing)  # i=1, j=0 (empty)
+Token(s::AbstractString, kind=nothing)
+```
+
+---
+
+### `after(t::Token) -> Token`
+
+Returns a new `Token` spanning all bytes in `t.data` that come **after** `t`
+ends (`t.j + 1 : length(t.data)`).  The `kind` field is inherited from `t`.
+Used internally by `AbstractTokenizer` to advance past the most-recently
+emitted token.
+
+---
+
+### `emit(t, kind, start_pattern_width, stop_pattern, anchor=Last) -> Token`
+
+Builds the next token from `t` (the remaining unprocessed input) in three steps:
+
+1. Skip `start_pattern_width` bytes (those matched by the start pattern).
+2. Call `findnext(stop_pattern, t, start_pattern_width + 1, anchor)` to find the end position.
+3. Return `Token(t.data, kind, t.i, t.i + len - 1)`.
+
+---
+
+### `width(pattern) -> Int`
+
+Returns the number of codeunits consumed by `pattern` when it matches at the
+start of a token.  Used by `emit` to skip past the start pattern before
+searching for the stop pattern.
+
+| Pattern | Width |
+|---------|-------|
+| `UInt8` | `1` |
+| `Char` | `ncodeunits(x)` |
+| `AbstractVector{UInt8}` | `length(x)` |
+| `AbstractString` | `ncodeunits(x)` |
+| `Function` | `1` |
+| `Tuple` | sum of element widths |
+
+---
+
+### `startswith(t::Token, pattern) -> Bool`
+
+Returns `true` when the bytes at the beginning of `t` match `pattern`.
+
+| Pattern | Matches when… |
+|---------|---------------|
+| `UInt8` | `t[1] == x` |
+| `Char` | `t[1] == x` (ASCII fast path), or `StringView(t)[1] == x` |
+| `AbstractVector{UInt8}` | `t[1:length(x)] == x` |
+| `AbstractString` | same as `AbstractVector{UInt8}` via `codeunits` |
+| `Function` | `f(t[1])` returns `true` |
+| `Tuple` | each element matches in sequence (empty tuple always matches) |
+
+---
+
+### `findnext(pattern, t::Token, i) -> Union{Int, UnitRange{Int}, Nothing}`
+### `findnext(pattern, t::Token, i, anchor::Anchor) -> Int`
+
+Locates `pattern` inside `t` starting at index `i` (1-based, relative to `t`).
+
+- The 3-argument form returns the raw result — an `Int`, a `UnitRange{Int}`, or `nothing`.
+- The 4-argument form applies the `Anchor` to reduce the result to a single `Int`.
+
+| Pattern | Behavior |
+|---------|----------|
+| `Function` | `findnext(f, view(t), i)` |
+| `Integer` | returns `x` directly (fixed-width stop) |
+| `UInt8` | next byte equal to `x` |
+| `Char` | byte equality (ASCII) or `StringView` search (UTF-8) |
+| `AbstractString` | searches `StringView(t)`, adjusted by `anchor` |
+| `Unescaped(c)` | next occurrence of `c` not preceded by an escape byte |
+
+`Anchor` controls which position within a range result is used:
+
+| Anchor | Position |
+|--------|----------|
+| `First` | `rng[1]` |
+| `Last` | `rng[end]` |
+| `Before` | `rng[1] - 1` |
+| `After` | `rng[end] + 1` |
+
+---
+
 ## Performance
 
 TokenIterators is very fast with minimal allocations:

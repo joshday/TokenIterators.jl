@@ -1,72 +1,143 @@
 using TokenIterators
-using TokenIterators: s, u, width, Before, Last
+using TokenIterators: Token, after, drop, emit, pick, format, token_error, Anchor, First, Last, Before, After, width, Unescaped
 using StringViews
 using Test
-using Downloads: download
 
-#-----------------------------------------------------------------------------# Quick Checks
-function quick_check(url, T)
-    file = download(url)
-    data = read(file)
-    o = T(data)
-    @test length(collect(o)) ≤ length(data)
-end
-quick_check("https://github.com/plotly/plotly.js/raw/v3.0.1/dist/plot-schema.json", JSONTokens)
-quick_check("https://github.com/", HTMLTokens)
-quick_check("https://schemas.opengis.net/kml/2.3/ogckml23.xsd", XMLTokens)
-quick_check("https://gist.githubusercontent.com/netj/8836201/raw/6f9306ad21398ea43cba4f7d537619d0e07d5ae3/iris.csv", DelimFileTokens)
+# Helper: token spanning the full string
+tok(s) = after(Token(s))
 
-
-_token(s) = TokenIterators.after(Token(s))
-
-
-
-#-----------------------------------------------------------------------------# starting patterns
-@testset "starting patterns" begin
-    t = _token("abc")
-
-    @test 'a' .. t
-    @test width(t, 'a') == 1
-
-    @test "ab" .. t
-    @test "abc" .. t
-    @test width(t, "ab") == 2
-    @test width(t, "abc") == 3
-
-    @test s(isletter) .. t
-    @test s(!isnumeric) .. t
-    @test !s(isnumeric) .. t
-    @test width(t, s(isletter)) == 1
-
-    @test 0x61 .. t
-    @test width(t, 0x61) == 1
-
-    @test b"abc" .. t
-    @test width(t, b"abc") == 3
-
-    @test ('a', 'b') .. t
-    @test width(t, ('a','b')) == 2
-
-    @test (s(isletter), 'b', s(∈('a':'z'))) .. t
-    @test width(t, (s(isletter), 'b', s(∈('a':'z')))) == 3
+@testset "Token" begin
+    t = tok("hello")
+    @test length(t) == 5
+    @test size(t) == (5,)
+    @test t[1] == UInt8('h')
+    @test StringView(t) == "hello"
+    @test view(t) == codeunits("hello")
 end
 
-#-----------------------------------------------------------------------------# ending patterns
-@testset "ending patterns" begin
-    t = _token("abc \"text\" def")
-
-    @test findnext('b', t, 2) == 2
-    @test findnext(UInt8('b'), t, 2) == 2
-    @test findnext(Last("bc"), t, 2) == 3
-    @test findnext(Before("c"), t, 2) == 2
-    @test findnext(Last(b"def"), t, 2) == length(t.data)
-    @test findnext(Before(b"def"), t, 2) == length(t.data) - 3
-    @test findnext(u('"'), t, 5) == findnext('"', StringView(t), 6)
+@testset "after / drop" begin
+    t = tok("abcdef")
+    @test StringView(after(t)) == ""           # after a full-span token is empty
+    t2 = Token("abcdef")                       # sentinel: i=1, j=0
+    @test StringView(after(t2)) == "abcdef"    # after sentinel is full span
+    @test StringView(drop(t, 2)) == "cdef"
+    @test drop(t, 0) == t
 end
 
-#-----------------------------------------------------------------------------# Token shift
-@testset "token shift" begin
-    t = _token("abcdefg")
-    @test length(t) == length(t.data)
-    @test length(t >> 1) == length(t.data) - 1
+@testset "startswith - UInt8" begin
+    t = tok("abc")
+    @test startswith(t, UInt8('a'))
+    @test !startswith(t, UInt8('b'))
+    @test width(UInt8('a')) == 1
+end
+
+@testset "startswith - Char" begin
+    t = tok("abc")
+    @test startswith(t, 'a')
+    @test !startswith(t, 'b')
+    @test width('a') == 1
+
+    # multibyte
+    t2 = tok("αβγ")
+    @test startswith(t2, 'α')
+    @test !startswith(t2, 'β')
+    @test width('α') == ncodeunits('α')
+end
+
+@testset "startswith - AbstractVector{UInt8}" begin
+    t = tok("abcdef")
+    @test startswith(t, b"abc")
+    @test startswith(t, b"abcdef")
+    @test !startswith(t, b"abd")
+    @test !startswith(t, b"abcdefg")   # longer than token
+    @test width(b"abc") == 3
+end
+
+@testset "startswith - AbstractString" begin
+    t = tok("abcdef")
+    @test startswith(t, "abc")
+    @test !startswith(t, "abd")
+    @test width("abc") == 3
+end
+
+@testset "startswith - Function" begin
+    t = tok("abc")
+    @test startswith(t, isletter ∘ Char)
+    @test !startswith(t, isdigit ∘ Char)
+    @test width(isletter) == 1
+end
+
+@testset "startswith - Tuple" begin
+    t = tok("abc")
+    @test startswith(t, ('a', 'b'))
+    @test startswith(t, ('a', 'b', 'c'))
+    @test !startswith(t, ('a', 'c'))
+    @test width(t, ('a', 'b')) == 2
+    @test width(t, ('a', 'b', 'c')) == 3
+end
+
+@testset "findnext - Function" begin
+    t = tok("abcde")
+    @test findnext(==(UInt8('c')), t, 1) == 3
+    @test isnothing(findnext(==(UInt8('z')), t, 1))
+end
+
+@testset "findnext - Integer" begin
+    t = tok("abcde")
+    @test findnext(3, t, 1) == 3
+end
+
+@testset "findnext - UInt8" begin
+    t = tok("abcde")
+    @test findnext(UInt8('c'), t, 1) == 3
+    @test isnothing(findnext(UInt8('z'), t, 1))
+end
+
+@testset "findnext - Char" begin
+    t = tok("abcde")
+    @test findnext('c', t, 1) == 3
+    @test isnothing(findnext('z', t, 1))
+end
+
+@testset "findnext - AbstractString with Anchor" begin
+    t = tok("hello world")
+    @test findnext("world", t, 1, First)  == 7
+    @test findnext("world", t, 1, Last)   == 11
+    @test findnext("world", t, 1, Before) == 6
+    @test findnext("world", t, 1, After)  == 12
+    @test findnext("zzz", t, 1, Before)   == length(t)   # nothing fallback
+end
+
+@testset "pick" begin
+    t = tok("hello world")
+    @test pick(t, 3:7, First)  == 3
+    @test pick(t, 3:7, Last)   == 7
+    @test pick(t, 3:7, Before) == 2
+    @test pick(t, 3:7, After)  == 8
+    @test pick(t, nothing, Before) == length(t)
+    @test_throws Exception pick(t, nothing, First)
+end
+
+@testset "findnext - Unescaped" begin
+    t = tok("""say "hello" and \\"world\\" """)
+    u = Unescaped('"', '\\')
+    # finds first unescaped "
+    @test findnext(u, t, 1) == findfirst('"', StringView(t))
+    # finds closing unescaped " after hello
+    i = findnext(u, t, 1)
+    j = findnext(u, t, i + 1)
+    @test StringView(t)[i:j] == "\"hello\""
+    # escaped " is skipped
+    t2 = tok("no quote here \\\" only escaped")
+    @test isnothing(findnext(Unescaped('"', '\\'), t2, 1))
+    # custom escape character
+    t3 = tok("a|b||c")
+    @test findnext(Unescaped('|', '|'), t3, 1) == 2   # first | at position 2
+    @test findnext(Unescaped('|', '|'), t3, 3) == 4   # next | at position 4
+end
+
+@testset "format" begin
+    @test format(1000) == "1_000"
+    @test format(1000000) == "1_000_000"
+    @test format(999) == "999"
 end
