@@ -1,5 +1,5 @@
 using TokenIterators
-using TokenIterators: Token, after, drop, emit, pick, format, token_error, Anchor, First, Last, Before, After, width, Unescaped
+using TokenIterators: Token, after, drop, emit, pick, format, token_error, Anchor, First, Last, Before, After, width, Unescaped, JSONTokens
 using StringViews
 using Test
 
@@ -140,4 +140,80 @@ end
     @test format(1000) == "1_000"
     @test format(1000000) == "1_000_000"
     @test format(999) == "999"
+end
+
+@testset "JSONTokens" begin
+    sv(t) = StringView(t)
+
+    # helper: tokenize and return (kind, text) pairs
+    tokenize(s) = [(t.kind, sv(t)) for t in JSONTokens.Tokenizer(codeunits(s))]
+
+    @testset "single-char tokens" begin
+        @test tokenize("{")[1] == (JSONTokens.curly_open,   "{")
+        @test tokenize("}")[1] == (JSONTokens.curly_close,  "}")
+        @test tokenize("[")[1] == (JSONTokens.square_open,  "[")
+        @test tokenize("]")[1] == (JSONTokens.square_close, "]")
+        # colon/comma are state-guarded; test them in context
+        @test tokenize("{\"k\":")[3] == (JSONTokens.colon, ":")
+        @test tokenize("{\"k\":1,")[5] == (JSONTokens.comma, ",")
+    end
+
+    @testset "keywords" begin
+        @test tokenize("true")[1]  == (JSONTokens.True,  "true")
+        @test tokenize("false")[1] == (JSONTokens.False, "false")
+        @test tokenize("null")[1]  == (JSONTokens.null,  "null")
+    end
+
+    @testset "whitespace" begin
+        @test tokenize(" ")[1]       == (JSONTokens.whitespace, " ")
+        @test tokenize("   ")[1]     == (JSONTokens.whitespace, "   ")
+        @test tokenize("\t\n\r ")[1] == (JSONTokens.whitespace, "\t\n\r ")
+    end
+
+    @testset "key vs string" begin
+        # key: string in object key position
+        @test tokenize("{\"hello\":")[2]        == (JSONTokens.key, "\"hello\"")
+        @test tokenize("{\"with \\\"esc\\\"\":")[2] == (JSONTokens.key, "\"with \\\"esc\\\"\"")
+        @test tokenize("{\"\":")[2]             == (JSONTokens.key, "\"\"")
+        # string: string in value position
+        @test tokenize("{\"k\":\"hello\"}")[4]        == (JSONTokens.string, "\"hello\"")
+        @test tokenize("{\"k\":\"with \\\"esc\\\"\"")[4] == (JSONTokens.string, "\"with \\\"esc\\\"\"")
+        @test tokenize("{\"k\":\"\"")[4]              == (JSONTokens.string, "\"\"")
+    end
+
+    @testset "number" begin
+        @test tokenize("42")[1]     == (JSONTokens.number, "42")
+        @test tokenize("-1")[1]     == (JSONTokens.number, "-1")
+        @test tokenize("3.14")[1]   == (JSONTokens.number, "3.14")
+        @test tokenize("-1e7")[1]   == (JSONTokens.number, "-1e7")
+        @test tokenize("1.5E-3")[1] == (JSONTokens.number, "1.5E-3")
+    end
+
+    @testset "full document" begin
+        toks = tokenize("""{"key": "value", "n": -1e7}""")
+        kinds = first.(toks)
+        texts = last.(toks)
+        @test kinds == [
+            JSONTokens.curly_open,
+            JSONTokens.key,         # object key → :key kind
+            JSONTokens.colon,
+            JSONTokens.whitespace,
+            JSONTokens.string,      # object value → :string kind
+            JSONTokens.comma,
+            JSONTokens.whitespace,
+            JSONTokens.key,
+            JSONTokens.colon,
+            JSONTokens.whitespace,
+            JSONTokens.number,
+            JSONTokens.curly_close,
+        ]
+        @test texts == ["{", "\"key\"", ":", " ", "\"value\"", ",", " ", "\"n\"", ":", " ", "-1e7", "}"]
+    end
+
+    @testset "RULES dict" begin
+        @test haskey(JSONTokens.RULES, JSONTokens.curly_open)
+        @test JSONTokens.RULES[JSONTokens.curly_open] == '{'
+        @test JSONTokens.RULES[JSONTokens.key]    isa TokenIterators.Rule
+        @test JSONTokens.RULES[JSONTokens.string] isa TokenIterators.Rule
+    end
 end

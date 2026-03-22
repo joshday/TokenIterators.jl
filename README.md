@@ -14,156 +14,162 @@
 
 ```julia
 using TokenIterators
+using StringViews: StringView
 
-t = JSONTokens(b"""{ "key": "value", "key2": -1e-7}""")
+t = JSONTokens.Tokenizer(codeunits("""{"key": "value", "n": -1e7}"""))
 
 collect(t)
-# 13-element Vector{Token{Base.CodeUnits{UInt8, String}, Symbol}}:
-#  1:1 (1 byte) curly_open {
-#  2:2 (1 byte) whitespace
-#  3:7 (5 bytes) string \"key\"
-#  8:8 (1 byte) colon :
-#  9:9 (1 byte) whitespace
-#  10:16 (7 bytes) string \"value\"
-#  17:17 (1 byte) comma ,
-#  18:18 (1 byte) whitespace
-#  19:24 (6 bytes) string \"key2\"
-#  25:25 (1 byte) colon :
-#  26:26 (1 byte) whitespace
-#  27:31 (5 bytes) number -1e-7
-#  32:32 (1 byte) curly_close }
+# 12-element Vector{Token{...}}:
+#  1→1  (1 byte)   curly_open  {
+#  2→6  (5 bytes)  key         "key"
+#  7→7  (1 byte)   colon       :
+#  8→8  (1 byte)   whitespace
+#  9→15 (7 bytes)  string      "value"
+#  ...
 ```
 
 
-## `TokenIterator` and `Token`
+## `Token`
 
-A `TokenIterator` (abstract type) iterates over `Token`s (smallest meaningful unit of text/data) from any input `T::AbstractVector{UInt8}`.
-
-Both `TokenIterator{T,K}` and `Token{T,K}` are parameterized by:
-
-1. The input data type `T <: AbstractVector{UInt8}`
-2. The type used to label the kind of token `K`.
-
-A `Token` acts like a `view(data, i:j)`.  It's defined as:
+A `Token` is a tagged view into a byte buffer:
 
 ```julia
-struct Token{T <: AbstractVector{UInt8}, K, S} <: AbstractVector{UInt8}
-    data::T
-    kind::K
-    i::Int  # starting index
-    j::Int  # closing index
-    state::S
+struct Token{T <: AbstractVector{UInt8}, K} <: AbstractVector{UInt8}
+    data::T   # underlying byte buffer (shared, never copied)
+    kind::K   # user-defined label (e.g. an enum value)
+    i::Int    # first byte index (inclusive)
+    j::Int    # last byte index (inclusive); j < i means empty
 end
 ```
 
 > [!TIP]
-> [StringViews.jl](https://github.com/JuliaStrings/StringViews.jl) (used heavily in this package) can provide lightweight AbstractString views of the token via `StringView(t)`.
-
-## Defining Iterators with Rules
+> [StringViews.jl](https://github.com/JuliaStrings/StringViews.jl) can provide zero-copy `AbstractString` views via `StringView(t)`.
 
 
-The iteration interface is based on finding the next Token based on the current one in the following steps:
+## `@tokenizer` Macro
 
-1. Join all the candidate bytes of the next token (everything after the current token).
-2. Identify the kind of the next token via a *starting pattern*.
-3. Determine the last index of the next token via `findnext` on an *ending pattern*.
-
-![](https://github.com/user-attachments/assets/da24efee-c1d8-4bf0-b6fe-ba2009798db1)
-
-
-## An Example: JSONTokens
-
-See `src/TokenIterators.jl` for more `TokenIterator` implementations.
+The `@tokenizer` macro generates a complete tokenizer module from a set of rules:
 
 ```julia
-struct JSONTokens{T} <: TokenIterator{T, Symbol, Nothing}
-    data::T
-end
-
-function next(o::JSONTokens, t::Token)
-    '{' .. t && return t(:curly_open)
-    '}' .. t && return t(:curly_close)
-    '[' .. t && return t(:square_open)
-    ']' .. t && return t(:square_close)
-    ':' .. t && return t(:colon)
-    ',' .. t && return t(:comma)
-    't' .. t && return t(:True, 4)
-    'f' .. t && return t(:False, 5)
-    'n' .. t && return t(:null, 4)
-    ∈(b"\t\n\r ") .. t && return t(:whitespace, Before(!∈(b"\t\n\r ")))
-    '"' .. t && return t(:string, u('"'))
-    ∈(b"-0123456789") .. t && return t(:number, Before(!∈(b"-+eE.012345678")))
-    return t(:unknown)
+@tokenizer MyTokens begin
+    kind = <rule>
+    ...
 end
 ```
 
-> [!NOTE]
-> - The `x .. tok` syntax is shorthand for `startswith(tok, x)`
-> - `t(kind, end_pattern, start_idx=2)` returns another Token with the given `kind` and ending position defined via `findnext(end_pattern, tok, start_idx)`
-
-## Mini-DSL
-
-### Starting Patterns
-
-| Type | Example | Match? |
-|------|---------|-------------|
-`UInt8` | `0x20` (space) | `x == token[1]`
-`Char` | `' '` | `x == StringView(token)[1])`
-`Function` | `∈(b" \t\r\n")` | `f(token[1])`
-`UseStringView` | `s(isspace)` | `f(StringView(token)[1])`
-`AbstractString` | `"abc"` | `startswith(StringView(token), x)`
-`AbstractVector{UInt8}` | `b"<a"` | `x == token[1:length(x)]`
-
-
-### Ending Patterns
-
-| Type | Example | Find Last Index |
-|------|---------|-----------------|
-`UInt8` | `0x20` (space) | `findnext(==(x), token, 2)`
-`Char` | `' '` | `findnext(==(x), StringView(token), 2)`
-`Before` | `Before("<")` | `findnext(==('<'), token, 2) - 1`
-`Last` | `Last("-->")` | `last(findnext("-->", StringView(token), 2))`
-
-## Tokenizer State
-
-Any type can be used to store state for a TokenIterator.  Changing the state is done via the operator:
+This creates a module `MyTokens` containing:
+- `MyTokens.Kinds` — an `@enum` with one variant per rule
+- `MyTokens.Tokenizer{T}` — an iterable tokenizer struct
+- `MyTokens.RULES` — a `Dict{Kinds, Any}` for introspection
 
 ```julia
-token | function_of_state
+t = MyTokens.Tokenizer(codeunits(input))
+for tok in t
+    println(tok.kind, ": ", StringView(tok))
+end
 ```
 
-We provide several types for common state functions:
+
+## DSL
+
+Each rule maps a token kind to a pattern expression:
+
+```
+kind = [state_guard -->] start_pat [.. stop_pat [>> anchor]] [=> new_state]
+```
+
+Operator precedence (high → low): `>>` > `..` > `-->` > `=>`
+
+### Operators
+
+| Operator | Meaning |
+|----------|---------|
+| `start .. stop` | Match tokens that start with `start`, scan forward to find `stop` |
+| `(start .. stop) >> Anchor` | Adjust where `stop` lands: `Before`, `After`, `First`, or `Last` |
+| `:guard --> rule` | Only apply this rule when `state == :guard` |
+| `rule => :new_state` | After matching, transition to `:new_state` |
+
+### Rule forms
 
 ```julia
-# Example: Adding two states to a Set{Symbol} or Vector{Symbol}
-token | Push!(:state_to_add) | Push!(:another_state_to_add)
+# 1. Start-only: emit exactly width(start) bytes
+whitespace = isspace
 
-# Example: Removing a state
-token | Pop!()
+# 2. Start + stop: scan from start to stop (default anchor: Last)
+string = '"' .. Unescaped('"')
 
-# Example: deleting a state from a Set{Symbol}
-token | Delete!(:state_to_remove)
+# 3. Start + stop + anchor: adjust the stop position
+whitespace = isspace .. !isspace >> Before    # stop before the non-space byte
+number     = isdigit .. !isdigit >> Before
+
+# 4. State transition: emit token, then change state
+curly_open = '{' => :expect_key
+
+# 5. State guard: only fire when in a specific state
+key    = :expect_key   --> '"' .. Unescaped('"') => :expect_colon
+string = :expect_value --> '"' .. Unescaped('"') => :in_object
+```
+
+### Start patterns
+
+| Type | Example | Matches when… |
+|------|---------|---------------|
+| `UInt8` | `0x22` | `t[1] == x` |
+| `Char` | `'"'` | `t[1] == x` (ASCII) or `StringView(t)[1] == x` (UTF-8) |
+| `AbstractString` | `"<!--"` | token starts with this string |
+| `AbstractVector{UInt8}` | `b"<!--"` | token starts with these bytes |
+| `Function` | `isspace`, `∈(b"\t\n")` | `f(t[1])` returns `true` |
+
+### Stop patterns
+
+| Type | Example | Finds… |
+|------|---------|--------|
+| `Integer` | `4` | fixed width (emit exactly N bytes) |
+| `UInt8` / `Char` | `'\n'` | next occurrence of that byte/char |
+| `AbstractString` | `"-->"` | end of the next match of that string |
+| `Function` | `!isspace` | next byte/char where `f` is true |
+| `Unescaped(c)` | `Unescaped('"')` | next unescaped occurrence of `c` |
+
+### Anchors
+
+Anchors adjust which position within a stop-pattern match is used as the token end:
+
+| Anchor | Token ends at… |
+|--------|----------------|
+| `Last` (default) | last byte of the match |
+| `First` | first byte of the match |
+| `Before` | byte just before the match |
+| `After` | byte just after the match |
+
+### State machine
+
+When any rule uses `-->` (guard) or `=>` (transition), the macro automatically generates a **stateful** tokenizer (`state::Symbol`, initial state `:default`).
+
+- Rules **without** a guard fire in any state.
+- Rules **with** `guard --> rule` only fire when `state == guard`.
+- Use `=>` to transition the state after a match.
+- Rules are checked **in order** — put more specific (guarded) rules before general fallbacks.
+
+```julia
+@tokenizer JSONTokens begin
+    curly_open   = '{'                                                    => :expect_key
+    curly_close  = '}'                                                    => :default
+    colon        = :expect_colon --> ':'                                  => :expect_value
+    comma        = :in_object    --> ','                                  => :expect_key
+    whitespace   = ∈(b"\t\n\r ") .. !∈(b"\t\n\r ") >> Before
+    key          = :expect_key   --> '"' .. Unescaped('"')                => :expect_colon
+    string       = :expect_value --> '"' .. Unescaped('"')                => :in_object
+    number       = ∈(b"-0123456789") .. !∈(b"-+eE.0123456789") >> Before => :in_object
+    unknown      = Returns(true)
+end
 ```
 
 ## API Reference
 
-### `Token`
+### `Token` constructors
 
 ```julia
-struct Token{T<:AbstractVector{UInt8}, K} <: AbstractVector{UInt8}
-    data::T   # underlying byte buffer (shared, never copied)
-    kind::K   # user-defined label (e.g. a Symbol or enum variant)
-    i::Int    # first byte index (inclusive)
-    j::Int    # last byte index (inclusive); j < i means empty token
-end
-```
-
-A `Token` is a tagged view into a byte buffer.  It behaves as an
-`AbstractVector{UInt8}` over `data[i:j]`, so standard indexing and iteration
-work directly on the token bytes.  Constructors:
-
-```julia
-Token(data::AbstractVector{UInt8}, kind=nothing)  # i=1, j=0 (empty)
+Token(data::AbstractVector{UInt8}, kind=nothing)  # i=1, j=0 (sentinel/empty)
 Token(s::AbstractString, kind=nothing)
 ```
 
