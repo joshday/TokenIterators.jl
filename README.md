@@ -1,6 +1,10 @@
+[![CI](https://github.com/joshday/TokenIterators.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/joshday/TokenIterators.jl/actions/workflows/CI.yml)
+[![Docs Build](https://github.com/joshday/TokenIterators.jl/actions/workflows/Docs.yml/badge.svg)](https://github.com/joshday/TokenIterators.jl/actions/workflows/Docs.yml)
+[![Stable Docs](https://img.shields.io/badge/docs-stable-blue)](https://joshday.github.io/TokenIterators.jl/stable/)
+[![Dev Docs](https://img.shields.io/badge/docs-dev-blue)](https://joshday.github.io/TokenIterators.jl/dev/)
+
 # TokenIterators
 
-[![Build Status](https://github.com/joshday/TokenIterators.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/joshday/TokenIterators.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
 
 - TokenIterators.jl provides easy syntax for writing lexers/tokenizers, with a few built-ins.
