@@ -14,7 +14,11 @@ Token(data::AbstractVector{UInt8}, kind=nothing) = Token(data, kind, 1, 0)
 Token(s::AbstractString, args...) = Token(codeunits(s), args...)
 
 Base.view(t::Token) = view(t.data, t.i:t.j)
-StringViews.StringView(t::Token) = StringView(view(t))
+if isdefined(Base, :StringView) # merged in Julia 1.14
+    Base.StringView(t::Token) = StringView(view(t))
+else
+    StringViews.StringView(t::Token) = StringView(view(t))
+end
 Base.length(t::Token) = t.j - t.i + 1
 Base.size(t::Token) = (length(t),)
 Base.getindex(t::Token, i::Integer) = view(t)[i]
