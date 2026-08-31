@@ -1,6 +1,6 @@
 using TokenIterators
 using TokenIterators: Token, after, drop, emit, pick, format, token_error, Anchor, First, Last, Before, After, width, Unescaped, JSONTokens
-using StringViews
+using StringViews: StringView
 using Test
 
 # Helper: token spanning the full string

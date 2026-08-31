@@ -1,6 +1,8 @@
 module TokenIterators
 
-using StringViews, StyledStrings
+import StringViews
+using StringViews: StringView
+using StyledStrings
 import Base: startswith, findnext
 
 #------------------------------------------------------------------------------# Token

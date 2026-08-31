@@ -1,7 +1,7 @@
 using BenchmarkTools
 using TokenIterators
 using TokenIterators: Token, after, drop, emit, width, Unescaped, JSONTokens, XMLTokens
-using StringViews
+using StringViews: StringView
 
 const SUITE = BenchmarkGroup()
 
